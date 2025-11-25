@@ -6,7 +6,7 @@ on:
       - setup-deployment-25-11-2025
 
 env:
-  OVERRIDE_NGINX: false  # Set to true to force nginx reconfiguration
+  OVERRIDE_NGINX: true  # Set to true to force nginx reconfiguration
 
 jobs:
   docker-build-push:
