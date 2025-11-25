@@ -3,7 +3,7 @@ name: Deploy FastAPI to EC2 - Develop
 on:
   push:
     branches:
-      - main
+      - setup-deployment-25-11-2025
 
 env:
   OVERRIDE_NGINX: false  # Set to true to force nginx reconfiguration
