@@ -4,7 +4,7 @@
 
 set -e
 
-PROJECT_DIR="/path/to/your/chat-service"  # Update this path
+PROJECT_DIR="/home/build/programming/website/bildup_projects/chat-service-global"  # Updated path
 cd "$PROJECT_DIR"
 
 echo "Starting SSL certificate renewal process..."
@@ -19,11 +19,28 @@ if docker run --rm \
     # Stop nginx temporarily
     docker-compose -f docker-compose.dev.yml stop nginx
     
-    # Renew certificates
+    # Stop any conflicting services on port 80
+    SERVICES_ON_80=$(docker ps --format "table {{.Names}}\t{{.Ports}}" | grep ":80->" | awk '{print $1}' | tr '\n' ' ')
+    if [ ! -z "$SERVICES_ON_80" ]; then
+      echo "Temporarily stopping services on port 80: $SERVICES_ON_80"
+      for service in $SERVICES_ON_80; do
+        docker stop $service
+      done
+    fi
+    
+    # Renew certificates using standalone mode
     docker run --rm \
+        -p 80:80 \
         -v $(pwd)/certbot/conf:/etc/letsencrypt \
-        -v $(pwd)/certbot/www:/var/www/certbot \
         certbot/certbot renew --quiet
+    
+    # Restart the services we stopped
+    if [ ! -z "$SERVICES_ON_80" ]; then
+      echo "Restarting services: $SERVICES_ON_80"
+      for service in $SERVICES_ON_80; do
+        docker start $service
+      done
+    fi
     
     # Start nginx again
     docker-compose -f docker-compose.dev.yml start nginx

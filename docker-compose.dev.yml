@@ -34,7 +34,7 @@ services:
     volumes:
       - redis_chat_data_dev:/data
     ports:
-      - "6381:6379" # Using different port to avoid conflicts
+      - "6380:6379" # Changed from 6381 to 6380 for chat service
     healthcheck:
       test: [ "CMD", "redis-cli", "ping" ]
       interval: 10s
@@ -47,8 +47,8 @@ services:
     image: nginx:alpine
     restart: always
     ports:
-      - "8004:80" # Using port 8004 to avoid conflicts (8000,8001,8002,8005 are used)
-      - "8443:443" # Using 8443 for HTTPS to avoid conflicts
+      - "8003:80"   # Changed from 8004 to 8003 (available port)
+      - "8444:443"  # Changed from 8443 to 8444 for HTTPS
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
       - ./certbot/conf:/etc/letsencrypt:ro # SSL certificates from certbot
@@ -78,7 +78,6 @@ services:
 
 volumes:
   redis_chat_data_dev:
-
 
 networks:
   chat_micro_service_dev:

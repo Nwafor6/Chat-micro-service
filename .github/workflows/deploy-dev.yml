@@ -6,7 +6,7 @@ on:
       - setup-deployment-25-11-2025
 
 env:
-  OVERRIDE_NGINX: false  # Set to true to force nginx reconfiguration
+  OVERRIDE_NGINX: True  # Set to true to force nginx reconfiguration
 
 jobs:
   docker-build-push:
@@ -97,17 +97,45 @@ jobs:
             mkdir -p ./certbot/www
             mkdir -p ./logs/nginx
             
-            # Stop any conflicting services temporarily for SSL generation
-            echo "Checking for services using port 80..."
-            CONFLICTING_SERVICE=$(sudo docker ps --format "table {{.Names}}\t{{.Ports}}" | grep "0.0.0.0:80" | head -1 | awk '{print $1}' || echo "")
+            # Check if certificates already exist and are valid
+            if [ -f "./certbot/conf/live/chat.valcertra.com/fullchain.pem" ]; then
+              echo "SSL certificates already exist, checking validity..."
+              CERT_EXPIRY=$(openssl x509 -enddate -noout -in ./certbot/conf/live/chat.valcertra.com/fullchain.pem | cut -d= -f2)
+              CERT_EXPIRY_EPOCH=$(date -d "$CERT_EXPIRY" +%s)
+              CURRENT_EPOCH=$(date +%s)
+              DAYS_UNTIL_EXPIRY=$(( (CERT_EXPIRY_EPOCH - CURRENT_EPOCH) / 86400 ))
+              
+              if [ $DAYS_UNTIL_EXPIRY -gt 30 ]; then
+                echo "✅ SSL certificates are valid for $DAYS_UNTIL_EXPIRY more days, skipping renewal"
+                exit 0
+              else
+                echo "⚠️  SSL certificates expire in $DAYS_UNTIL_EXPIRY days, will renew"
+              fi
+            fi
             
-            if [ ! -z "$CONFLICTING_SERVICE" ]; then
-              echo "Found service using port 80: $CONFLICTING_SERVICE"
-              echo "Temporarily stopping $CONFLICTING_SERVICE for SSL certificate generation..."
-              sudo docker stop $CONFLICTING_SERVICE
-              NEED_RESTART_SERVICE="$CONFLICTING_SERVICE"
+            # Stop all services using port 80 temporarily for SSL generation
+            echo "Checking for services using port 80..."
+            SERVICES_ON_80=$(sudo docker ps --format "table {{.Names}}\t{{.Ports}}" | grep ":80->" | awk '{print $1}' | tr '\n' ' ')
+            
+            if [ ! -z "$SERVICES_ON_80" ]; then
+              echo "Found services using port 80: $SERVICES_ON_80"
+              echo "Temporarily stopping services for SSL certificate generation..."
+              for service in $SERVICES_ON_80; do
+                sudo docker stop $service
+              done
+              NEED_RESTART_SERVICES="$SERVICES_ON_80"
             else
-              NEED_RESTART_SERVICE=""
+              NEED_RESTART_SERVICES=""
+            fi
+            
+            # Also check for any nginx processes on port 80
+            if sudo lsof -i :80 | grep -q nginx; then
+              echo "Found nginx process on port 80, stopping it..."
+              sudo systemctl stop nginx || true
+              sudo pkill nginx || true
+              NEED_RESTART_NGINX=true
+            else
+              NEED_RESTART_NGINX=false
             fi
             
             # Run certbot using standalone mode (which requires port 80)
@@ -124,10 +152,18 @@ jobs:
               -d chat.valcertra.com \
               -d www.chat.valcertra.com
             
-            # Restart the conflicting service if we stopped it
-            if [ ! -z "$NEED_RESTART_SERVICE" ]; then
-              echo "Restarting $NEED_RESTART_SERVICE..."
-              sudo docker start $NEED_RESTART_SERVICE
+            # Restart the services if we stopped them
+            if [ ! -z "$NEED_RESTART_SERVICES" ]; then
+              echo "Restarting stopped services..."
+              for service in $NEED_RESTART_SERVICES; do
+                sudo docker start $service
+              done
+            fi
+            
+            # Restart nginx if we stopped it
+            if [ "$NEED_RESTART_NGINX" = true ]; then
+              echo "Restarting nginx..."
+              sudo systemctl start nginx || true
             fi
             
             # Verify certificates were created
@@ -370,7 +406,7 @@ jobs:
             # Test application health through nginx
             echo "=== Testing application health through nginx ==="
             for i in {1..10}; do
-              if curl -f http://localhost:8004/health; then
+              if curl -f http://localhost:8003/health; then
                 echo "✅ Application is healthy through nginx!"
                 break
               else
@@ -381,9 +417,9 @@ jobs:
             
             # Test through domain (if SSL is setup)
             echo "=== Testing through domain ==="
-            if curl -f -k https://chat.valcertra.com:8443/health 2>/dev/null; then
+            if curl -f -k https://chat.valcertra.com:8444/health 2>/dev/null; then
               echo "✅ Application accessible through domain with SSL!"
-            elif curl -f http://chat.valcertra.com:8004/health 2>/dev/null; then
+            elif curl -f http://chat.valcertra.com:8003/health 2>/dev/null; then
               echo "✅ Application accessible through domain!"
             else
               echo "⚠️  Application not accessible through domain (this may be expected if domain is not configured yet)"
@@ -399,3 +435,6 @@ jobs:
             $DOCKER_CMD image prune -f
             
             echo "=== Chat Microservice deployment completed successfully! ==="
+            echo "🚀 Access your chat service at:"
+            echo "   HTTP:  http://chat.valcertra.com:8003"
+            echo "   HTTPS: https://chat.valcertra.com:8444"
