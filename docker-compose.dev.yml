@@ -19,7 +19,7 @@ services:
       - APP_NAME=Global Chat Service
       - ENV=development
       - DEBUG=true
-      - BASE_URL=https://chat-micro-service.nwafor.tech
+      - BASE_URL=https://chat.valcertra.com
       - API_PREFIX=/api/v1
       - DB_TYPE=postgres
       - JWT_ALGORITHM=HS256
@@ -72,7 +72,7 @@ services:
       - ./certbot/www:/var/www/certbot
     environment:
       - SSL_EMAIL=${SSL_EMAIL}
-    command: certonly --webroot --webroot-path=/var/www/certbot --email ${SSL_EMAIL} --agree-tos --no-eff-email --staging -d chat-micro-service.nwafor.tech -d www.chat-micro-service.nwafor.tech
+    command: certonly --webroot --webroot-path=/var/www/certbot --email ${SSL_EMAIL} --agree-tos --no-eff-email --staging -d chat.valcertra.com -d www.chat.valcertra.com
     networks:
       - chat_micro_service_dev
 

@@ -4,7 +4,7 @@
 
 set -e
 
-PROJECT_DIR="/path/to/your/chat-micro-service"  # Update this path
+PROJECT_DIR="/path/to/your/chat-service"  # Update this path
 cd "$PROJECT_DIR"
 
 echo "Starting SSL certificate renewal process..."

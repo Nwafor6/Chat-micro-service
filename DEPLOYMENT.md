@@ -24,7 +24,7 @@ This deployment has been updated to be a standalone, generic chat microservice w
 - **Automated SSL certificate generation** using Let's Encrypt
 - **SSL certificates managed by Certbot** and copied to Docker volumes
 - **HTTPS redirect** configured in Nginx
-- **Domain**: `chat-micro-service.nwafor.tech`
+- **Domain**: `chat.valcertra.com`
 
 ### 5. Environment Variable Management
 - Environment variables are now **built directly into the Docker image**
@@ -49,10 +49,10 @@ This deployment has been updated to be a standalone, generic chat microservice w
 
 ## Service URLs
 
-- **Main Service**: https://chat-micro-service.nwafor.tech
-- **Health Check**: https://chat-micro-service.nwafor.tech/health
-- **WebSocket Docs**: https://chat-micro-service.nwafor.tech/api/v1/docs/websockets
-- **API Docs**: https://chat-micro-service.nwafor.tech/docs (dev/staging only)
+- **Main Service**: https://chat.valcertra.com
+- **Health Check**: https://chat.valcertra.com/health
+- **WebSocket Docs**: https://chat.valcertra.com/api/v1/docs/websockets
+- **API Docs**: https://chat.valcertra.com/docs (dev/staging only)
 
 ## Container Architecture
 

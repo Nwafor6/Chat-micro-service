@@ -105,7 +105,7 @@ jobs:
             http {
                 server {
                     listen 80;
-                    server_name chat-micro-service.nwafor.tech www.chat-micro-service.nwafor.tech;
+                    server_name chat.valcertra.com www.chat.valcertra.com;
                     
                     location /.well-known/acme-challenge/ {
                         root /var/www/certbot;
@@ -141,8 +141,8 @@ jobs:
               --agree-tos \
               --no-eff-email \
               --force-renewal \
-              -d chat-micro-service.nwafor.tech \
-              -d www.chat-micro-service.nwafor.tech
+              -d chat.valcertra.com \
+              -d www.chat.valcertra.com
             
             # Stop temporary nginx
             sudo docker stop nginx_temp || true
@@ -152,7 +152,7 @@ jobs:
             rm -f ./nginx.temp.conf
             
             # Verify certificates were created
-            if [ -f "./certbot/conf/live/chat-micro-service.nwafor.tech/fullchain.pem" ]; then
+            if [ -f "./certbot/conf/live/chat.valcertra.com/fullchain.pem" ]; then
               echo "✅ SSL certificates obtained successfully"
             else
               echo "❌ Failed to obtain SSL certificates"
@@ -216,7 +216,7 @@ jobs:
             mkdir -p ./logs/nginx
             
             # Verify SSL certificates exist
-            if [ -f "./certbot/conf/live/chat-micro-service.nwafor.tech/fullchain.pem" ]; then
+            if [ -f "./certbot/conf/live/chat.valcertra.com/fullchain.pem" ]; then
               echo "✅ SSL certificates found and ready for use"
             else
               echo "❌ SSL certificates not found. This should not happen after SSL setup step."
@@ -402,9 +402,9 @@ jobs:
             
             # Test through domain (if SSL is setup)
             echo "=== Testing through domain ==="
-            if curl -f -k https://chat-micro-service.nwafor.tech/health 2>/dev/null; then
+            if curl -f -k https://chat.valcertra.com/health 2>/dev/null; then
               echo "✅ Application accessible through domain with SSL!"
-            elif curl -f http://chat-micro-service.nwafor.tech/health 2>/dev/null; then
+            elif curl -f http://chat.valcertra.com/health 2>/dev/null; then
               echo "✅ Application accessible through domain!"
             else
               echo "⚠️  Application not accessible through domain (this may be expected if domain is not configured yet)"
