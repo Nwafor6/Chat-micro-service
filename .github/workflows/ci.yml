@@ -1,0 +1,44 @@
+name: Python Code Quality Check
+
+on:
+    push:
+        branches: ['*']
+
+jobs:
+    lint-format-security:
+        runs-on: ubuntu-latest
+
+        strategy:
+            matrix:
+                python-version: ['3.12'] # Adjust Python versions as needed
+
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v3
+
+            - name: Set up Python
+              uses: actions/setup-python@v4
+              with:
+                  python-version: ${{ matrix.python-version }}
+
+            - name: Install linters and formatters
+              run: |
+                  python -m pip install --upgrade pip
+                  pip install black isort pylint
+
+            - name: Get Python files excluding ignored directories
+              run: |
+                  git ls-files --exclude-standard | grep '\.py$' | grep -Ev '^(tests|\.venv|storage|migrations)/' > py_files.txt
+                  cat py_files.txt || echo "No Python files found to check."
+
+            - name: Check code formatting with Black
+              run: |
+                  if [ -s py_files.txt ]; then black --config pyproject.toml --check $(cat py_files.txt); fi
+
+            - name: Sort imports with isort
+              run: |
+                  if [ -s py_files.txt ]; then isort --profile black --check-only --diff $(cat py_files.txt); fi
+
+            - name: Run pylint for linting
+              run: |
+                  if [ -s py_files.txt ]; then pylint $(cat py_files.txt); fi

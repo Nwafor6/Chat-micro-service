@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CORS Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .log {
+            background: #f4f4f4;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            white-space: pre-wrap;
+        }
+
+        .error {
+            background: #ffe6e6;
+            border-left: 4px solid #ff0000;
+        }
+
+        .success {
+            background: #e6ffe6;
+            border-left: 4px solid #00ff00;
+        }
+
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>CORS Test - Port 5500</h1>
+    <p>Testing requests from <strong>http://localhost:5500</strong> to your FastAPI service</p>
+
+    <!-- <button onclick="testHealthEndpoint()">Test Health Endpoint</button> -->
+    <button onclick="simpleTest(); return false;">Simple Test (with JWT)</button>
+    <button onclick="testCreateRoom(); return false;">Test Create Room (with JWT)</button>
+    <button onclick="testGetUserRooms(); return false;">Test Get User Rooms</button>
+    <button onclick="testGetRoom(); return false;">Test Get Room by ID</button>
+    <button onclick="testGetOrCreateDM(); return false;">Test Get/Create DM</button>
+    <button onclick="testHealthEndpoint(); return false;">Test Health Endpoint</button>
+    <button onclick="clearLogs(); return false;">Clear Logs</button>
+
+    <div id="logs"></div>
+
+    <script>
+        // const API_BASE = 'https://organic-warm-spider.ngrok-free.app';
+        const API_BASE = 'http://localhost:8080';
+
+        // Test JWT token (from your test_jwt.py)
+        const TEST_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzc2MDA2NDc4LCJpYXQiOjE3NDQ0NzA0NzgsImp0aSI6IjM2YmJmOGI1YTllZTQ4NWRiMjM2ZWY5NjFmYmQ4NzAxIiwidXNlcl9pZCI6IjJlYjJiNDI2LTViM2ItNGEwMC1hZTg3LWIzODFlMmMxZGMxZiIsInVzZXJuYW1lIjoiZ2xvcnkiLCJmdWxsX25hbWUiOm51bGwsImlkIjoiMmViMmI0MjYtNWIzYi00YTAwLWFlODctYjM4MWUyYzFkYzFmIiwicm9sZSI6InVzZXIifQ.c0i9xFiQEV_Ex40gahg22hWn4unueeop-y1Vb5sYRLQ'
+
+        // Add debugging for page navigation
+        window.addEventListener('beforeunload', function (e) {
+            console.log('Page is about to unload/reload!');
+            console.trace('Stack trace for page unload:');
+            log('WARNING: Page is about to reload/navigate!', 'error');
+
+            // Try to prevent the unload for debugging
+            e.preventDefault();
+            e.returnValue = '';
+            return '';
+        });
+
+        function log(message, type = 'info') {
+            console.log(`[${type.toUpperCase()}] ${message}`);
+            const logsDiv = document.getElementById('logs');
+            const logEntry = document.createElement('div');
+            logEntry.className = `log ${type}`;
+            logEntry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            logsDiv.appendChild(logEntry);
+            logsDiv.scrollTop = logsDiv.scrollHeight;
+        }
+
+        function clearLogs() {
+            document.getElementById('logs').innerHTML = '';
+        }
+
+        async function testHealthEndpoint() {
+            log('=== Testing Health Endpoint ===');
+            try {
+                const response = await fetch(`${API_BASE}/health`, {
+                    method: 'GET'
+                });
+
+                log(`Health endpoint response: ${response.status}`, response.ok ? 'success' : 'error');
+
+                if (response.ok) {
+                    const data = await response.json();
+                    log(`Health data: ${JSON.stringify(data, null, 2)}`);
+                } else {
+                    const errorText = await response.text();
+                    log(`Error response: ${errorText}`, 'error');
+                }
+
+            } catch (error) {
+                log(`Health endpoint error: ${error.message}`, 'error');
+                console.error('Health endpoint error:', error);
+            }
+        }
+
+        async function testCreateRoom() {
+            log('=== FUNCTION STARTED: testCreateRoom ===');
+            log('Testing create room with JWT...');
+
+            // Prevent any default behavior
+            event?.preventDefault?.();
+
+            try {
+                const url = `${API_BASE}/api/v1/chats/rooms/create-room`;
+                log(`Making request to: ${url}`);
+
+                const roomData = {
+                    name: `Test Room ${Date.now()}`,
+                    description: 'A test room created from HTML'
+                };
+
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${TEST_TOKEN}`
+                    },
+                    body: JSON.stringify(roomData)
+                });
+
+                log(`Create room response: ${response.status}`, response.ok ? 'success' : 'error');
+                log(`Request URL: ${url}`);
+                log(`Response URL: ${response.url}`);
+                log(`Redirected: ${response.redirected}`);
+                log(`Response type: ${response.type}`);
+
+                // Log response headers
+                log('Response headers:');
+                for (let [key, value] of response.headers.entries()) {
+                    log(`  ${key}: ${value}`);
+                }
+
+                if (response.ok) {
+                    const data = await response.json();
+                    log(`Response data: ${JSON.stringify(data, null, 2)}`);
+                } else {
+                    const errorText = await response.text();
+                    log(`Error response: ${errorText}`, 'error');
+                }
+
+            } catch (error) {
+                log(`Create room error: ${error.message}`, 'error');
+                console.error('Full error object:', error);
+            } finally {
+                log('=== FUNCTION COMPLETED: testCreateRoom ===');
+            }
+        }
+
+        async function testCreateRoomNoAuth() {
+            log('Testing create room without auth...');
+            try {
+                const roomData = {
+                    name: `Test Room No Auth ${Date.now()}`,
+                    description: 'A test room without authentication'
+                };
+
+                const response = await fetch(`${API_BASE}/api/v1/chats/rooms/create-room`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(roomData)
+                });
+
+                log(`Create room (no auth) response: ${response.status}`, response.ok ? 'success' : 'error');
+                const data = await response.text();
+                log(`Response data: ${data}`);
+
+            } catch (error) {
+                log(`Create room (no auth) error: ${error.message}`, 'error');
+                console.error('Create room (no auth) error:', error);
+            }
+        }
+
+        async function testCreateRoomDirect() {
+            log('Testing create room with direct route...');
+            try {
+                const url = `${API_BASE}/api/v1/chats/rooms/create-room`;  // Use correct API path
+                log(`Making request to: ${url}`);
+
+                const roomData = {
+                    name: `Test Room Direct ${Date.now()}`,
+                    description: 'A test room created from HTML'
+                };
+
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${TEST_TOKEN}`
+                    },
+                    body: JSON.stringify(roomData)
+                });
+
+                log(`Direct create room response: ${response.status}`, response.ok ? 'success' : 'error');
+                log(`Final URL: ${response.url}`);
+
+                const data = await response.text();
+                log(`Response data: ${data.substring(0, 500)}...`);  // Show more response data
+
+            } catch (error) {
+                log(`Direct create room error: ${error.message}`, 'error');
+                console.error('Direct create room error:', error);
+            }
+        }
+
+        // Catch any unhandled errors
+        window.addEventListener('error', function (e) {
+            log(`JavaScript Error: ${e.error?.message || e.message}`, 'error');
+            console.error('Unhandled error:', e);
+        });
+
+        window.addEventListener('unhandledrejection', function (e) {
+            log(`Unhandled Promise Rejection: ${e.reason}`, 'error');
+            console.error('Unhandled promise rejection:', e);
+        });
+
+        // Monitor for programmatic navigation
+        const originalReload = window.location.reload;
+        window.location.reload = function () {
+            console.trace('window.location.reload() called from:');
+            log('RELOAD DETECTED: window.location.reload() called!', 'error');
+            return originalReload.apply(this, arguments);
+        };
+
+        // Monitor for location changes
+        let lastLocation = window.location.href;
+        setInterval(() => {
+            if (window.location.href !== lastLocation) {
+                console.log(`Location changed from ${lastLocation} to ${window.location.href}`);
+                log(`Location changed to: ${window.location.href}`, 'error');
+                lastLocation = window.location.href;
+            }
+        }, 100);
+
+        // Simple test without complex logging
+        async function simpleTest() {
+            console.log('Simple test starting...');
+
+            try {
+                const response = await fetch('http://localhost:8080/api/v1/chats/rooms/create-room', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${TEST_TOKEN}`
+                    },
+                    body: JSON.stringify({ name: `Simple Room ${Date.now()}` })
+                });
+
+                console.log('Response status:', response.status);
+                const data = await response.json();
+                console.log('Response data:', data);
+                alert('Success! Check console for details.');
+
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error: ' + error.message);
+            }
+
+            console.log('Simple test completed');
+        }
+
+        // Test Get User Rooms
+        async function testGetUserRooms() {
+            log('=== Testing Get User Rooms ===');
+            try {
+                const response = await fetch(`${API_BASE}/api/v1/chats/rooms/user-rooms`, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${TEST_TOKEN}`
+                    }
+                });
+
+                log(`Get user rooms response: ${response.status}`, response.ok ? 'success' : 'error');
+
+                if (response.ok) {
+                    const data = await response.json();
+                    log(`Found ${data.length} rooms for user`);
+                    log(`Rooms data: ${JSON.stringify(data, null, 2)}`);
+                } else {
+                    const errorText = await response.text();
+                    log(`Error response: ${errorText}`, 'error');
+                }
+
+            } catch (error) {
+                log(`Get user rooms error: ${error.message}`, 'error');
+                console.error('Get user rooms error:', error);
+            }
+        }
+
+        // Test Get Room by ID
+        async function testGetRoom() {
+            log('=== Testing Get Room by ID ===');
+
+            // First, let's get the user rooms to find a room ID
+            try {
+                const roomsResponse = await fetch(`${API_BASE}/api/v1/chats/rooms/user-rooms`, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${TEST_TOKEN}`
+                    }
+                });
+
+                if (roomsResponse.ok) {
+                    const rooms = await roomsResponse.json();
+                    if (rooms.length > 0) {
+                        const roomId = rooms[0].id;
+                        log(`Testing with room ID: ${roomId}`);
+
+                        const response = await fetch(`${API_BASE}/api/v1/chats/rooms/${roomId}`, {
+                            method: 'GET',
+                            headers: {
+                                'Authorization': `Bearer ${TEST_TOKEN}`
+                            }
+                        });
+
+                        log(`Get room response: ${response.status}`, response.ok ? 'success' : 'error');
+
+                        if (response.ok) {
+                            const data = await response.json();
+                            log(`Room data: ${JSON.stringify(data, null, 2)}`);
+                        } else {
+                            const errorText = await response.text();
+                            log(`Error response: ${errorText}`, 'error');
+                        }
+                    } else {
+                        log('No rooms found. Create a room first!', 'error');
+                    }
+                } else {
+                    log('Failed to get rooms list', 'error');
+                }
+
+            } catch (error) {
+                log(`Get room error: ${error.message}`, 'error');
+                console.error('Get room error:', error);
+            }
+        }
+
+        // Test Get or Create DM
+        async function testGetOrCreateDM() {
+            log('=== Testing Get/Create DM ===');
+
+            // Using a sample user ID for DM test
+            const sampleUserId = 'sample-user-123';
+
+            try {
+                const response = await fetch(`${API_BASE}/api/v1/chats/rooms/dm/${sampleUserId}`, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${TEST_TOKEN}`
+                    }
+                });
+
+                log(`Get/Create DM response: ${response.status}`, response.ok ? 'success' : 'error');
+
+                if (response.ok) {
+                    const data = await response.json();
+                    log(`DM Room data: ${JSON.stringify(data, null, 2)}`);
+                } else {
+                    const errorText = await response.text();
+                    log(`Error response: ${errorText}`, 'error');
+                }
+
+            } catch (error) {
+                log(`Get/Create DM error: ${error.message}`, 'error');
+                console.error('Get/Create DM error:', error);
+            }
+        }
+
+        // Auto-test on page load
+        window.onload = function () {
+            log('Page loaded, ready for testing...');
+            // Remove the automatic health endpoint call
+            // testHealthEndpoint();  // Comment out or remove this line
+        };
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,40 @@
+[MASTER]
+ignore=tests/,.venv/,storage/,migrations/
+ignore-patterns=^tests/,^\.venv/,^storage/,^migrations/
+jobs = 1  # Number of parallel jobs to use
+persistent = yes  # Save reports for later comparison
+
+[MESSAGES CONTROL]
+disable =
+    too-many-ancestors,
+    protected-access,
+    C0114,  # Missing module docstring
+    C0103,  # Class constant UPPER_CASE naming style
+    R0903,  # Too few public methods
+    R0914,
+    R0912,
+    ; W1203,  # logging-fstring-interpolation
+
+    ; Temporary disable
+    ; too-many-arguments, # This is unforgivable
+    ; too-many-positional-arguments, # This is unforgivable
+    ; duplicate-code, # THis is even for super junior devs
+    missing-function-docstring,
+    unused-argument,
+    keyword-arg-before-vararg,
+    E0401,  # Missing module
+    W0718,  # broad-exception-caught
+    C0115,  # Missing class docstring
+
+[REPORTS]
+output-format = colorized  # Use colored output in terminals
+reports = no  # Disable full reports to keep logs concise
+
+[FORMAT]
+max-line-length = 110  # Match black's line length
+
+[TYPECHECK]
+ignored-modules = fastapi, requests  # Modules that pylint cannot import in static analysis
+
+[LOGGING]
+logging-modules = loguru

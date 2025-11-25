@@ -1,0 +1,32 @@
+default_language_version:
+  python: python3.12
+repos:
+  - repo: https://github.com/PyCQA/autoflake
+    rev: v2.3.1
+    hooks:
+      - id: autoflake
+        args:
+          [
+            "--remove-all-unused-imports",
+            "--remove-unused-variables",
+            "--in-place",
+            "--recursive",
+            "--exclude=tests,.venv,storage,migrations",
+          ]
+  - repo: https://github.com/psf/black
+    rev: 25.1.0
+    hooks:
+      - id: black
+
+  - repo: https://github.com/PyCQA/isort
+    rev: 6.0.1
+    hooks:
+      - id: isort
+        args: ["--profile", "black"] # Use Black profile for isort
+
+  - repo: https://github.com/PyCQA/pylint
+    rev: v3.3.6
+    hooks:
+      - id: pylint
+        args: ["--rcfile=.pylintrc"]
+        exclude: '^(tests|\.venv|storage|migrations)/'

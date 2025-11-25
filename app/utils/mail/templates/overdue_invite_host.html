@@ -1,0 +1,46 @@
+{% extends "layout.html" %} {% block content %}
+<h2>Hello {{ host.first_name }},</h2>
+
+<p>
+    This is a notification that the following invitees have exceeded their
+    checkout time for their invite at <strong>{{ entity_name }}</strong>.
+</p>
+
+<h3><strong>Invite Details:</strong></h3>
+<ul>
+    <li><strong>Host:</strong> {{ host.first_name }} {{ host.last_name }}</li>
+    <li><strong>Permit ID:</strong> {{ permit_id }}</li>
+    <li><strong>Check-in Time:</strong> {{ checkin_time }}</li>
+    <li><strong>Check-Out Time:</strong> {{ checkout_time }}</li>
+</ul>
+
+<h3><strong>Overdue Invitees:</strong></h3>
+<table
+    border="1"
+    cellpadding="5"
+    cellspacing="0"
+    style="border-collapse: collapse; width: 100%"
+>
+    <thead>
+        <tr style="background-color: #f2f2f2">
+            <th style="text-align: left">Invitee Name</th>
+            <th style="text-align: left">Email</th>
+            <th style="text-align: left">Phone</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for invitee in invitees %}
+        <tr>
+            <td>{{ invitee.invitee_name }}</td>
+            <td>{{ invitee.invitee_email }}</td>
+            <td>{{ invitee.invitee_phone }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<p>Please take the necessary action.</p>
+
+<p><strong>Best Regards,</strong><br />SafePazz Team</p>
+
+{% endblock %}

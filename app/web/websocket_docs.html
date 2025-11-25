@@ -1,0 +1,807 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebSocket API Documentation - Global Chat Service</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background-color: #f8f9fa;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            text-align: center;
+            padding: 40px 20px;
+            margin-bottom: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+
+        .section {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+            margin-bottom: 30px;
+            overflow: hidden;
+        }
+
+        .section-header {
+            background: #f8f9fa;
+            padding: 20px;
+            border-bottom: 1px solid #e9ecef;
+        }
+
+        .section-header h2 {
+            color: #495057;
+            font-size: 1.5rem;
+            margin-bottom: 5px;
+        }
+
+        .section-content {
+            padding: 20px;
+        }
+
+        .endpoint {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            overflow: hidden;
+        }
+
+        .endpoint-header {
+            background: #28a745;
+            color: white;
+            padding: 15px 20px;
+            font-family: 'Courier New', monospace;
+            font-weight: bold;
+        }
+
+        .endpoint-content {
+            padding: 20px;
+        }
+
+        .method {
+            background: #28a745;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            font-weight: bold;
+            margin-right: 10px;
+        }
+
+        .code-block {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 6px;
+            padding: 15px;
+            margin: 15px 0;
+            overflow-x: auto;
+        }
+
+        .code-block pre {
+            margin: 0;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+        }
+
+        .message-type {
+            background: #17a2b8;
+            color: white;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 0.8rem;
+            font-weight: bold;
+            margin-right: 5px;
+        }
+
+        .parameter {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 6px;
+            padding: 15px;
+            margin: 10px 0;
+        }
+
+        .parameter h4 {
+            color: #856404;
+            margin-bottom: 8px;
+        }
+
+        .status-code {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            border-radius: 6px;
+            padding: 10px;
+            margin: 10px 0;
+        }
+
+        .error-code {
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            border-radius: 6px;
+            padding: 10px;
+            margin: 10px 0;
+        }
+
+        .note {
+            background: #e7f3ff;
+            border-left: 4px solid #007bff;
+            padding: 15px 20px;
+            margin: 15px 0;
+        }
+
+        .warning {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 15px 20px;
+            margin: 15px 0;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15px 0;
+        }
+
+        th,
+        td {
+            text-align: left;
+            padding: 12px;
+            border-bottom: 1px solid #e9ecef;
+        }
+
+        th {
+            background: #f8f9fa;
+            font-weight: 600;
+            color: #495057;
+        }
+
+        .nav-menu {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+            padding: 20px;
+            margin-bottom: 30px;
+            position: sticky;
+            top: 20px;
+        }
+
+        .nav-menu ul {
+            list-style: none;
+        }
+
+        .nav-menu li {
+            margin: 8px 0;
+        }
+
+        .nav-menu a {
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 500;
+            transition: color 0.3s;
+        }
+
+        .nav-menu a:hover {
+            color: #764ba2;
+        }
+
+        .flex {
+            display: flex;
+            gap: 30px;
+        }
+
+        .main-content {
+            flex: 1;
+        }
+
+        .sidebar {
+            flex: 0 0 250px;
+        }
+
+        @media (max-width: 768px) {
+            .flex {
+                flex-direction: column;
+            }
+
+            .sidebar {
+                flex: none;
+                order: -1;
+            }
+
+            .nav-menu {
+                position: static;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>WebSocket API Documentation</h1>
+            <p>Real-time chat communication for Global Chat Microservice</p>
+        </div>
+
+        <div class="flex">
+            <div class="sidebar">
+                <div class="nav-menu">
+                    <h3>Navigation</h3>
+                    <ul>
+                        <li><a href="#overview">Overview</a></li>
+                        <li><a href="#authentication">Authentication</a></li>
+                        <li><a href="#endpoints">Endpoints</a></li>
+                        <li><a href="#message-types">Message Types</a></li>
+                        <li><a href="#examples">Examples</a></li>
+                        <li><a href="#error-handling">Error Handling</a></li>
+                        <li><a href="#best-practices">Best Practices</a></li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="main-content">
+                <section id="overview" class="section">
+                    <div class="section-header">
+                        <h2>Overview</h2>
+                    </div>
+                    <div class="section-content">
+                        <p>The Global Chat Microservice provides real-time WebSocket communication for chat
+                            functionality.
+                            This API enables instant messaging, typing indicators, user presence, and file sharing
+                            within chat rooms.</p>
+
+                        <h3>Key Features</h3>
+                        <ul>
+                            <li>Real-time bidirectional communication</li>
+                            <li>JWT-based authentication</li>
+                            <li>Room-based chat organization</li>
+                            <li>Typing indicators</li>
+                            <li>Message history retrieval</li>
+                            <li>User presence notifications</li>
+                            <li>Error handling and connection management</li>
+                        </ul>
+
+                        <div class="note">
+                            <strong>Note:</strong> All WebSocket connections require JWT authentication and valid room
+                            access permissions.
+                        </div>
+                    </div>
+                </section>
+
+                <section id="authentication" class="section">
+                    <div class="section-header">
+                        <h2>Authentication</h2>
+                    </div>
+                    <div class="section-content">
+                        <p>WebSocket connections require JWT authentication passed as a query parameter.</p>
+
+                        <h3>Authentication Flow</h3>
+                        <ol>
+                            <li>Obtain a JWT token from the main authentication endpoint</li>
+                            <li>Include the token as a query parameter when connecting to WebSocket</li>
+                            <li>The server validates the token and user permissions</li>
+                            <li>Connection is established if authentication succeeds</li>
+                        </ol>
+
+                        <div class="code-block">
+                            <pre>ws://localhost:8080/ws/rooms/{room_id}/?token={jwt_token}</pre>
+                        </div>
+
+                        <div class="warning">
+                            <strong>Security Warning:</strong> Always use secure WebSocket (wss://) in production
+                            environments.
+                        </div>
+                    </div>
+                </section>
+
+                <section id="endpoints" class="section">
+                    <div class="section-header">
+                        <h2>WebSocket Endpoints</h2>
+                    </div>
+                    <div class="section-content">
+
+                        <div class="endpoint">
+                            <div class="endpoint-header">
+                                <span class="method">WS</span> /ws/rooms/{room_id}/
+                            </div>
+                            <div class="endpoint-content">
+                                <h4>Chat Room WebSocket</h4>
+                                <p>Main WebSocket endpoint for real-time chat communication within a specific room.</p>
+
+                                <h5>Path Parameters</h5>
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>Parameter</th>
+                                            <th>Type</th>
+                                            <th>Required</th>
+                                            <th>Description</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr>
+                                            <td>room_id</td>
+                                            <td>string (UUID)</td>
+                                            <td>Yes</td>
+                                            <td>Unique identifier of the chat room</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+
+                                <h5>Query Parameters</h5>
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>Parameter</th>
+                                            <th>Type</th>
+                                            <th>Required</th>
+                                            <th>Description</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr>
+                                            <td>token</td>
+                                            <td>string</td>
+                                            <td>Yes</td>
+                                            <td>JWT authentication token</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+
+                                <h5>Connection Response</h5>
+                                <div class="code-block">
+                                    <pre>{
+  "type": "connection_established",
+  "room_id": "550e8400-e29b-41d4-a716-446655440000",
+  "user_id": "123e4567-e89b-12d3-a456-426614174000",
+  "message": "Successfully connected to room"
+}</pre>
+                                </div>
+
+                                <h5>Initial Message History</h5>
+                                <p>Upon successful connection, the server will send recent messages from the room (up to
+                                    50 messages).</p>
+
+                                <div class="code-block">
+                                    <pre>{
+  "type": "message_history",
+  "messages": [
+    {
+      "id": "msg_123",
+      "content": "Hello everyone!",
+      "sender_id": "user_456",
+      "sender_name": "John Doe",
+      "message_type": "text",
+      "created_at": "2025-11-25T10:30:00Z",
+      "is_deleted": false
+    }
+  ]
+}</pre>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="endpoint">
+                            <div class="endpoint-header">
+                                <span class="method">WS</span> /ws/test/
+                            </div>
+                            <div class="endpoint-content">
+                                <h4>Test WebSocket</h4>
+                                <p>Simple echo WebSocket endpoint for testing connectivity and basic functionality.</p>
+
+                                <h5>Usage</h5>
+                                <p>This endpoint accepts any text message and echoes it back. No authentication
+                                    required.</p>
+
+                                <div class="code-block">
+                                    <pre>// Send
+"Hello WebSocket!"
+
+// Receive
+{
+  "type": "echo",
+  "message": "Hello WebSocket!"
+}</pre>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <section id="message-types" class="section">
+                    <div class="section-header">
+                        <h2>Message Types</h2>
+                    </div>
+                    <div class="section-content">
+
+                        <h3>Outgoing Messages (Client → Server)</h3>
+
+                        <div class="parameter">
+                            <h4><span class="message-type">message</span> Text Message</h4>
+                            <p>Send a text message to the chat room.</p>
+                            <div class="code-block">
+                                <pre>{
+  "type": "message",
+  "content": "Hello everyone!",
+  "message_type": "text"
+}</pre>
+                            </div>
+                        </div>
+
+                        <div class="parameter">
+                            <h4><span class="message-type">typing</span> Typing Indicator</h4>
+                            <p>Notify other users about typing status.</p>
+                            <div class="code-block">
+                                <pre>{
+  "type": "typing",
+  "is_typing": true
+}</pre>
+                            </div>
+                        </div>
+
+                        <h3>Incoming Messages (Server → Client)</h3>
+
+                        <div class="parameter">
+                            <h4><span class="message-type">connection_established</span> Connection Success</h4>
+                            <p>Confirmation of successful WebSocket connection.</p>
+                            <div class="code-block">
+                                <pre>{
+  "type": "connection_established",
+  "room_id": "550e8400-e29b-41d4-a716-446655440000",
+  "user_id": "123e4567-e89b-12d3-a456-426614174000",
+  "message": "Successfully connected to room"
+}</pre>
+                            </div>
+                        </div>
+
+                        <div class="parameter">
+                            <h4><span class="message-type">message_history</span> Historical Messages</h4>
+                            <p>Recent messages from the room sent upon connection.</p>
+                            <div class="code-block">
+                                <pre>{
+  "type": "message_history",
+  "messages": [
+    {
+      "id": "msg_123",
+      "content": "Hello!",
+      "sender_id": "user_456",
+      "sender_name": "John Doe",
+      "message_type": "text",
+      "created_at": "2025-11-25T10:30:00Z",
+      "is_deleted": false
+    }
+  ]
+}</pre>
+                            </div>
+                        </div>
+
+                        <div class="parameter">
+                            <h4><span class="message-type">new_message</span> New Chat Message</h4>
+                            <p>Real-time message broadcast to all room members.</p>
+                            <div class="code-block">
+                                <pre>{
+  "type": "new_message",
+  "id": "msg_789",
+  "content": "How is everyone doing?",
+  "sender_id": "user_123",
+  "sender_name": "Jane Smith",
+  "message_type": "text",
+  "created_at": "2025-11-25T10:35:00Z",
+  "room_id": "550e8400-e29b-41d4-a716-446655440000"
+}</pre>
+                            </div>
+                        </div>
+
+                        <div class="parameter">
+                            <h4><span class="message-type">user_joined</span> User Connection</h4>
+                            <p>Notification when a user joins the room.</p>
+                            <div class="code-block">
+                                <pre>{
+  "type": "user_joined",
+  "user_id": "user_789",
+  "message": "User user_789 joined the room"
+}</pre>
+                            </div>
+                        </div>
+
+                        <div class="parameter">
+                            <h4><span class="message-type">user_left</span> User Disconnection</h4>
+                            <p>Notification when a user leaves the room.</p>
+                            <div class="code-block">
+                                <pre>{
+  "type": "user_left",
+  "user_id": "user_789",
+  "message": "User user_789 left the room"
+}</pre>
+                            </div>
+                        </div>
+
+                        <div class="parameter">
+                            <h4><span class="message-type">typing_status</span> Typing Notification</h4>
+                            <p>Real-time typing status updates from other users.</p>
+                            <div class="code-block">
+                                <pre>{
+  "type": "typing_status",
+  "user_id": "user_456",
+  "user_name": "John Doe",
+  "is_typing": true
+}</pre>
+                            </div>
+                        </div>
+
+                        <div class="parameter">
+                            <h4><span class="message-type">error</span> Error Messages</h4>
+                            <p>Error notifications for various failure scenarios.</p>
+                            <div class="code-block">
+                                <pre>{
+  "type": "error",
+  "message": "Invalid JSON format",
+  "code": "INVALID_JSON"
+}</pre>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <section id="examples" class="section">
+                    <div class="section-header">
+                        <h2>Usage Examples</h2>
+                    </div>
+                    <div class="section-content">
+
+                        <h3>JavaScript WebSocket Client</h3>
+                        <div class="code-block">
+                            <pre>// Connect to WebSocket
+const token = 'your-jwt-token-here';
+const roomId = '550e8400-e29b-41d4-a716-446655440000';
+const ws = new WebSocket(`ws://localhost:8080/ws/rooms/${roomId}/?token=${token}`);
+
+// Connection handlers
+ws.onopen = function(event) {
+    console.log('Connected to WebSocket');
+};
+
+ws.onmessage = function(event) {
+    const message = JSON.parse(event.data);
+    console.log('Received message:', message);
+    
+    switch(message.type) {
+        case 'connection_established':
+            console.log('Successfully connected to room');
+            break;
+        case 'new_message':
+            displayMessage(message);
+            break;
+        case 'user_joined':
+            showUserJoined(message.user_id);
+            break;
+        case 'typing_status':
+            updateTypingIndicator(message);
+            break;
+        case 'error':
+            console.error('WebSocket error:', message.message);
+            break;
+    }
+};
+
+ws.onerror = function(error) {
+    console.error('WebSocket error:', error);
+};
+
+ws.onclose = function(event) {
+    console.log('WebSocket connection closed:', event.code, event.reason);
+};
+
+// Send a message
+function sendMessage(content) {
+    const message = {
+        type: 'message',
+        content: content,
+        message_type: 'text'
+    };
+    ws.send(JSON.stringify(message));
+}
+
+// Send typing indicator
+function sendTyping(isTyping) {
+    const message = {
+        type: 'typing',
+        is_typing: isTyping
+    };
+    ws.send(JSON.stringify(message));
+}</pre>
+                        </div>
+
+                        <h3>Python WebSocket Client</h3>
+                        <div class="code-block">
+                            <pre>import asyncio
+import json
+import websockets
+
+async def chat_client():
+    token = 'your-jwt-token-here'
+    room_id = '550e8400-e29b-41d4-a716-446655440000'
+    uri = f"ws://localhost:8080/ws/rooms/{room_id}/?token={token}"
+    
+    async with websockets.connect(uri) as websocket:
+        # Listen for messages
+        async def listen():
+            async for message in websocket:
+                data = json.loads(message)
+                print(f"Received: {data}")
+                
+                if data['type'] == 'connection_established':
+                    print("Connected successfully!")
+                elif data['type'] == 'new_message':
+                    print(f"{data['sender_name']}: {data['content']}")
+        
+        # Send messages
+        async def send_message():
+            while True:
+                content = input("Enter message: ")
+                message = {
+                    "type": "message",
+                    "content": content,
+                    "message_type": "text"
+                }
+                await websocket.send(json.dumps(message))
+        
+        # Run both tasks concurrently
+        await asyncio.gather(listen(), send_message())
+
+# Run the client
+asyncio.run(chat_client())</pre>
+                        </div>
+                    </div>
+                </section>
+
+                <section id="error-handling" class="section">
+                    <div class="section-header">
+                        <h2>Error Handling</h2>
+                    </div>
+                    <div class="section-content">
+
+                        <h3>WebSocket Close Codes</h3>
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Code</th>
+                                    <th>Reason</th>
+                                    <th>Description</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td>1000</td>
+                                    <td>Normal Closure</td>
+                                    <td>Connection closed normally</td>
+                                </tr>
+                                <tr>
+                                    <td>4000</td>
+                                    <td>Connection Failed</td>
+                                    <td>General connection failure</td>
+                                </tr>
+                                <tr>
+                                    <td>4001</td>
+                                    <td>Authentication Failed</td>
+                                    <td>Invalid or expired JWT token</td>
+                                </tr>
+                                <tr>
+                                    <td>4003</td>
+                                    <td>Access Denied</td>
+                                    <td>Room not found or access denied</td>
+                                </tr>
+                            </tbody>
+                        </table>
+
+                        <h3>Error Message Format</h3>
+                        <div class="code-block">
+                            <pre>{
+  "type": "error",
+  "message": "Description of the error",
+  "code": "ERROR_CODE"
+}</pre>
+                        </div>
+
+                        <h3>Common Errors</h3>
+                        <div class="error-code">
+                            <strong>Invalid JSON Format</strong><br>
+                            Sent when the client sends malformed JSON data.
+                        </div>
+
+                        <div class="error-code">
+                            <strong>Unknown Message Type</strong><br>
+                            Sent when the client sends a message with an unsupported type.
+                        </div>
+
+                        <div class="error-code">
+                            <strong>Authentication Failed</strong><br>
+                            Sent when JWT token is invalid, expired, or missing.
+                        </div>
+
+                        <div class="error-code">
+                            <strong>Room Access Denied</strong><br>
+                            Sent when user doesn't have permission to access the specified room.
+                        </div>
+                    </div>
+                </section>
+
+                <section id="best-practices" class="section">
+                    <div class="section-header">
+                        <h2>Best Practices</h2>
+                    </div>
+                    <div class="section-content">
+
+                        <h3>Connection Management</h3>
+                        <ul>
+                            <li>Implement automatic reconnection with exponential backoff</li>
+                            <li>Handle connection drops gracefully</li>
+                            <li>Validate JWT token expiry and refresh when necessary</li>
+                            <li>Monitor connection health with ping/pong frames</li>
+                        </ul>
+
+                        <h3>Message Handling</h3>
+                        <ul>
+                            <li>Always validate message format before sending</li>
+                            <li>Implement message queuing for offline scenarios</li>
+                            <li>Handle duplicate messages appropriately</li>
+                            <li>Limit message frequency to prevent spam</li>
+                        </ul>
+
+                        <h3>Security Considerations</h3>
+                        <ul>
+                            <li>Use WSS (secure WebSocket) in production</li>
+                            <li>Validate all input data on both client and server</li>
+                            <li>Implement rate limiting for message sending</li>
+                            <li>Store JWT tokens securely (not in localStorage for sensitive apps)</li>
+                        </ul>
+
+                        <h3>Performance Optimization</h3>
+                        <ul>
+                            <li>Implement message batching for high-frequency updates</li>
+                            <li>Use compression for large message payloads</li>
+                            <li>Implement client-side message caching</li>
+                            <li>Optimize typing indicator frequency</li>
+                        </ul>
+
+                        <div class="note">
+                            <strong>Tip:</strong> Always test WebSocket connections with various network conditions and
+                            handle edge cases like network timeouts and server restarts.
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </div>
+    </div>
+</body>
+
+</html>

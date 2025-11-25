@@ -1,0 +1,25 @@
+# [flake8]
+
+# # Specify the maximum allowed line length
+# max-line-length = 110
+
+# ignore =
+#     N803,  # Class constant names should be UPPER_CASE
+#     W503,  # Line break before binary operator
+#     ; E501,  # Line length exceeds
+
+# # Define the format for output
+# format = default
+
+# # Exclude specific directories or files from checks
+# exclude =
+#     .git,
+#     __pycache__,
+#     build,
+#     dist,
+#     tests/*,
+#     migrations/*,
+#     app/core/config.py
+
+# # Set the complexity level for McCabe complexity check
+# max-complexity = 10

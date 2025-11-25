@@ -1,0 +1,606 @@
+name: Deploy FastAPI to EC2 - Develop
+
+on:
+  push:
+    branches:
+      - main
+
+env:
+  OVERRIDE_NGINX: false  # Set to true to force nginx reconfiguration
+
+jobs:
+  docker-build-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/bildupai_chat:dev
+            ${{ secrets.DOCKERHUB_USERNAME }}/bildupai_chat:${{ github.sha }}
+          cache-from: type=registry,ref=${{ secrets.DOCKERHUB_USERNAME }}/bildupai_chat:buildcache
+          cache-to: type=registry,ref=${{ secrets.DOCKERHUB_USERNAME }}/bildupai_chat:buildcache,mode=max
+
+  install-docker:
+    runs-on: ubuntu-latest
+    needs: docker-build-push
+    steps:
+      - name: Install Docker and Docker Compose on server
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            echo "=== Checking if Docker is installed ==="
+            
+            if ! command -v docker &> /dev/null; then
+              echo "Docker not found. Installing Docker..."
+              sudo apt-get update
+              sudo apt-get install -y apt-transport-https ca-certificates curl gnupg lsb-release
+              curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+              echo "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+              sudo apt-get update
+              sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+              sudo systemctl start docker
+              sudo systemctl enable docker
+              sudo usermod -aG docker $USER
+              echo "Docker installation completed"
+            else
+              echo "Docker is already installed: $(docker --version)"
+            fi
+            
+            if ! docker compose version &> /dev/null; then
+              echo "Docker Compose plugin not available. Installing..."
+              sudo apt-get update
+              sudo apt-get install -y docker-compose-plugin
+            else
+              echo "Docker Compose is available: $(docker compose version)"
+            fi
+            
+            sudo docker --version
+            sudo docker compose version
+            echo "=== Docker installation check completed ==="
+
+  setup-nginx:
+    runs-on: ubuntu-latest
+    needs: install-docker
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Nginx and Certbot
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            echo "=== Setting up Nginx and SSL ==="
+            echo "OVERRIDE_NGINX flag: ${{ env.OVERRIDE_NGINX }}"
+            
+            # Install Nginx if not present
+            if ! command -v nginx &> /dev/null; then
+              echo "Nginx not found. Installing..."
+              sudo apt-get update
+              sudo apt-get install -y nginx
+              sudo systemctl start nginx
+              sudo systemctl enable nginx
+              echo "Nginx installation completed"
+            else
+              echo "Nginx is already installed: $(nginx -v 2>&1)"
+            fi
+            
+            # Install Certbot if not present
+            if ! command -v certbot &> /dev/null; then
+              echo "Certbot not found. Installing..."
+              sudo apt-get update
+              sudo apt-get install -y certbot python3-certbot-nginx
+              echo "Certbot installation completed"
+            else
+              echo "Certbot is already installed: $(certbot --version)"
+            fi
+            
+            SITE_CONFIG="/etc/nginx/sites-available/chat-service-dev"
+            SITES_ENABLED="/etc/nginx/sites-enabled/chat-service-dev"
+            
+            # Check if we should override nginx config
+            if [ "${{ env.OVERRIDE_NGINX }}" = "true" ] || [ ! -f "$SITE_CONFIG" ]; then
+              echo "Creating/Updating Nginx configuration for chat-service-dev..."
+              
+              # Remove existing config if override is true
+              if [ "${{ env.OVERRIDE_NGINX }}" = "true" ]; then
+                echo "Override flag is true, removing existing nginx configuration..."
+                sudo rm -f "$SITE_CONFIG"
+                sudo rm -f "$SITES_ENABLED"
+              fi
+              
+              # Create the nginx configuration
+              sudo tee $SITE_CONFIG > /dev/null <<'EOF'
+            server {
+                listen 80;
+                server_name chat-service.bildup.ai www.chat-service.bildup.ai;
+
+                # Security headers
+                add_header X-Frame-Options "SAMEORIGIN" always;
+                add_header X-XSS-Protection "1; mode=block" always;
+                add_header X-Content-Type-Options "nosniff" always;
+                add_header Referrer-Policy "no-referrer-when-downgrade" always;
+                add_header Content-Security-Policy "default-src 'self' http: https: data: blob: 'unsafe-inline'" always;
+
+                # Proxy dynamic HTTP requests to FastAPI
+                location / {
+                    proxy_pass http://127.0.0.1:8080;
+                    proxy_set_header Host $host;
+                    proxy_set_header X-Real-IP $remote_addr;
+                    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                    proxy_set_header X-Forwarded-Proto $scheme;
+                    proxy_set_header X-Forwarded-Host $server_name;
+                    
+                    # Timeout settings
+                    proxy_connect_timeout 60s;
+                    proxy_send_timeout 60s;
+                    proxy_read_timeout 60s;
+                }
+
+                # WebSocket support
+                location /ws/ {
+                    proxy_pass http://127.0.0.1:8080;
+                    proxy_http_version 1.1;
+                    proxy_set_header Upgrade $http_upgrade;
+                    proxy_set_header Connection "upgrade";
+                    proxy_set_header Host $host;
+                    proxy_set_header X-Real-IP $remote_addr;
+                    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                    proxy_set_header X-Forwarded-Proto $scheme;
+                    proxy_set_header X-Forwarded-Host $server_name;
+                    
+                    # WebSocket timeout settings
+                    proxy_read_timeout 86400;
+                    proxy_send_timeout 86400;
+                }
+
+                # Health check endpoint
+                location /health {
+                    proxy_pass http://127.0.0.1:8080;
+                    proxy_set_header Host $host;
+                    proxy_set_header X-Real-IP $remote_addr;
+                    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                    proxy_set_header X-Forwarded-Proto $scheme;
+                    access_log off;
+                }
+
+                # Gzip compression
+                gzip on;
+                gzip_vary on;
+                gzip_min_length 1024;
+                gzip_proxied expired no-cache no-store private auth;
+                gzip_types
+                    text/plain
+                    text/css
+                    text/xml
+                    text/javascript
+                    application/json
+                    application/javascript
+                    application/xml+rss
+                    application/atom+xml
+                    image/svg+xml;
+            }
+            EOF
+              
+              echo "Nginx configuration created/updated successfully"
+              
+              # Create symbolic link
+              echo "Creating symbolic link for chat-service-dev..."
+              sudo ln -sf $SITE_CONFIG $SITES_ENABLED
+              echo "Symbolic link created successfully"
+              
+              # Remove default nginx site if it exists
+              if [ -L "/etc/nginx/sites-enabled/default" ]; then
+                echo "Removing default nginx site..."
+                sudo rm -f /etc/nginx/sites-enabled/default
+              fi
+              
+            else
+              echo "Nginx configuration already exists and OVERRIDE_NGINX is false. Skipping nginx config update."
+            fi
+            
+            # Always test nginx configuration
+            echo "Testing Nginx configuration..."
+            if sudo nginx -t; then
+              echo "Nginx configuration is valid"
+              echo "Reloading Nginx..."
+              sudo systemctl reload nginx
+              echo "Nginx status:"
+              sudo systemctl status nginx --no-pager -l
+            else
+              echo "❌ Nginx configuration test failed!"
+              echo "Showing nginx error log:"
+              sudo tail -20 /var/log/nginx/error.log
+              exit 1
+            fi
+            
+            echo "=== Nginx setup completed ==="
+
+      - name: Setup SSL Certificate
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            echo "=== Setting up SSL Certificate ==="
+            echo "OVERRIDE_NGINX flag: ${{ env.OVERRIDE_NGINX }}"
+            
+            # Check if SSL certificate already exists
+            if sudo certbot certificates 2>/dev/null | grep -q "chat-service.bildup.ai"; then
+              echo "SSL certificate for chat-service.bildup.ai already exists"
+              
+              # If override is true, recreate the certificate
+              if [ "${{ env.OVERRIDE_NGINX }}" = "true" ]; then
+                echo "Override flag is true, recreating SSL certificate..."
+                
+                # Delete existing certificate
+                sudo certbot delete --non-interactive --cert-name chat-service.bildup.ai
+                
+                # Stop nginx temporarily
+                sudo systemctl stop nginx
+                
+                # Get new SSL certificate
+                sudo certbot certonly \
+                  --standalone \
+                  --non-interactive \
+                  --agree-tos \
+                  --email ${{ secrets.SSL_EMAIL }} \
+                  -d chat-service.bildup.ai \
+                  -d www.chat-service.bildup.ai
+                
+                # Start nginx back up
+                sudo systemctl start nginx
+                
+                # Configure nginx for SSL
+                sudo certbot --nginx \
+                  --non-interactive \
+                  --agree-tos \
+                  --redirect \
+                  -d chat-service.bildup.ai \
+                  -d www.chat-service.bildup.ai
+                
+                echo "SSL certificate recreated successfully"
+              else
+                echo "Renewing existing certificate if needed..."
+                sudo certbot renew --quiet
+              fi
+            else
+              echo "Setting up SSL certificate for the first time..."
+              
+              # Stop nginx temporarily for standalone verification
+              sudo systemctl stop nginx
+              
+              # Get SSL certificate using standalone mode
+              sudo certbot certonly \
+                --standalone \
+                --non-interactive \
+                --agree-tos \
+                --email ${{ secrets.SSL_EMAIL }} \
+                -d chat-service.bildup.ai \
+                -d www.chat-service.bildup.ai
+              
+              # Start nginx back up
+              sudo systemctl start nginx
+              
+              # Run certbot nginx to update the configuration
+              sudo certbot --nginx \
+                --non-interactive \
+                --agree-tos \
+                --redirect \
+                -d chat-service.bildup.ai \
+                -d www.chat-service.bildup.ai
+              
+              echo "SSL certificate setup completed"
+            fi
+            
+            # Setup auto-renewal cron job if not exists
+            if ! sudo crontab -l 2>/dev/null | grep -q "certbot renew"; then
+              echo "Setting up SSL certificate auto-renewal..."
+              (sudo crontab -l 2>/dev/null; echo "0 12 * * * /usr/bin/certbot renew --quiet") | sudo crontab -
+              echo "Auto-renewal cron job setup completed"
+            else
+              echo "SSL auto-renewal is already configured"
+            fi
+            
+            echo "=== SSL setup completed ==="
+
+  update-environment:
+    runs-on: ubuntu-latest
+    needs: setup-nginx
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Ensure remote docker-compose path is clear
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            REMOTE_PATH="./docker-compose.dev.yml"
+            if [ -d "$REMOTE_PATH" ]; then rm -rf "$REMOTE_PATH"; fi
+            if [ -f "$REMOTE_PATH" ]; then rm -f "$REMOTE_PATH"; fi
+
+      - name: Copy docker-compose.dev.yml to server
+        uses: appleboy/scp-action@v0.1.4
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          source: "docker-compose.dev.yml"
+          target: "."
+
+      - name: Update Environment Variables on Server
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            echo "=== Updating Environment Variables ==="
+            
+            # Remove existing environment file if it exists
+            if [ -f ".env.dev" ]; then
+              echo "Removing existing .env.dev file..."
+              rm -f .env.dev
+            fi
+            
+            # Stop existing containers first to ensure they pick up new environment
+            COMPOSE_CMD="sudo docker compose"
+            if groups $USER | grep -q docker; then
+              COMPOSE_CMD="docker compose"
+            fi
+            $COMPOSE_CMD -f docker-compose.dev.yml down --remove-orphans 2>/dev/null || true
+            
+            # Create new environment file using cat with EOF to avoid shell interpretation
+            echo "Creating new .env.dev file..."
+            cat <<'EOF' > .env.dev
+            APP_NAME=BildupAI Chat Service
+            APP_DESCRIPTION=Real-time chat service for BildupAI
+            APP_VERSION=1.0.0
+            DEBUG=true
+            ENV=development
+            EOF
+            
+            # Add secrets separately with proper escaping
+            echo "DATABASE_URL=${{ secrets.DATABASE_URL }}" >> .env.dev
+            echo "DB_TYPE=postgres" >> .env.dev
+            echo 'JWT_SECRET_KEY=${{ secrets.JWT_SECRET_KEY }}' >> .env.dev
+            echo "JWT_ALGORITHM=HS256" >> .env.dev
+            echo "JWT_ACCESS_TOKEN_EXPIRE_MINUTES=1440" >> .env.dev
+            echo 'REDIS_URL=${{ secrets.REDIS_URL }}' >> .env.dev
+            
+            # Add remaining non-secret variables
+            cat <<'EOF' >> .env.dev
+            ALLOWED_ORIGINS=cat-noble-colt.ngrok-free.app,jointly-quiet-ladybug.ngrok-free.app,bildai-mvp.vercel.app,edu.bildup.ai,localhost:8000
+            ALLOWED_METHODS=GET,POST,PUT,DELETE,OPTIONS
+            REDIS_HOST=redis_dev
+            REDIS_PORT=6379
+            REDIS_DB=0
+            BASE_URL=https://chat-service.bildup.ai
+            API_PREFIX=/api/v1
+            LOG_LEVEL=INFO
+            LOG_FORMAT=json
+            EOF
+            
+            # Verify the file was created and show first few lines (without sensitive data)
+            echo "Verifying .env.dev file creation..."
+            if [ -f ".env.dev" ]; then
+              echo "✅ .env.dev file created successfully"
+              echo "File size: $(wc -l < .env.dev) lines"
+              echo "First few lines (non-sensitive):"
+              head -5 .env.dev
+              echo ""
+              echo "JWT_SECRET_KEY length check:"
+              grep "JWT_SECRET_KEY=" .env.dev | cut -d'=' -f2 | wc -c
+              echo "First 15 characters of JWT_SECRET_KEY:"
+              grep "JWT_SECRET_KEY=" .env.dev | cut -d'=' -f2 | cut -c1-15
+            else
+              echo "❌ Failed to create .env.dev file"
+              exit 1
+            fi
+            
+            echo "Environment variables update completed"
+
+  deploy-docker:
+    runs-on: ubuntu-latest
+    needs: update-environment
+    steps:
+      - name: Deploy and restart Docker containers
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            echo "=== Starting Docker deployment ==="
+            DOCKER_CMD="sudo docker"
+            COMPOSE_CMD="sudo docker compose"
+            if groups $USER | grep -q docker; then
+              DOCKER_CMD="docker"
+              COMPOSE_CMD="docker compose"
+            fi
+            
+            # Login to Docker Hub
+            echo "${{ secrets.DOCKERHUB_TOKEN }}" | $DOCKER_CMD login --username "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
+            
+            # Pull latest images
+            echo "=== Pulling latest images ==="
+            $COMPOSE_CMD -f docker-compose.dev.yml pull
+            
+            # Stop existing containers and remove them completely
+            echo "=== Stopping and removing existing containers ==="
+            $COMPOSE_CMD -f docker-compose.dev.yml down --remove-orphans || true
+            
+            # Start database and redis first
+            echo "=== Starting database and Redis ==="
+            $COMPOSE_CMD -f docker-compose.dev.yml up -d postgres_dev redis_dev
+            
+            # Wait for database to be ready
+            echo "=== Waiting for database to be ready ==="
+            for i in {1..30}; do
+              if $COMPOSE_CMD -f docker-compose.dev.yml exec -T postgres_dev pg_isready -U postgres; then
+                echo "✅ Database is ready!"
+                break
+              else
+                echo "⏳ Attempt $i: Database not ready yet, waiting..."
+                sleep 2
+              fi
+            done
+            
+            # Start all services
+            echo "=== Starting all services ==="
+            $COMPOSE_CMD -f docker-compose.dev.yml up -d
+            
+            # Wait for web service to be running
+            echo "=== Waiting for web service to start ==="
+            sleep 15
+            
+            echo "=== Container status ==="
+            $COMPOSE_CMD -f docker-compose.dev.yml ps
+            
+            # Verify JWT_SECRET_KEY is properly loaded in container
+            echo "=== Verifying JWT_SECRET_KEY in container ==="
+            sleep 5
+            if $COMPOSE_CMD -f docker-compose.dev.yml ps web | grep -q "Up"; then
+              echo "Checking JWT_SECRET_KEY in container..."
+              $COMPOSE_CMD -f docker-compose.dev.yml exec -T web python -c "
+            from app.core.config import settings
+            jwt_key = settings.jwt_secret_key
+            print(f'JWT_SECRET_KEY loaded: {jwt_key[:15]}...' if jwt_key else 'JWT_SECRET_KEY not found!')
+            print(f'JWT_SECRET_KEY length: {len(jwt_key)}')
+            " || echo "Failed to verify environment variables in container"
+            else
+              echo "Web container is not running, skipping JWT verification"
+            fi
+
+  run-migrations:
+    runs-on: ubuntu-latest
+    needs: deploy-docker
+    steps:
+      - name: Run Database Migrations
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            echo "=== Running Database Migrations ==="
+            COMPOSE_CMD="sudo docker compose"
+            if groups $USER | grep -q docker; then
+              COMPOSE_CMD="docker compose"
+            fi
+            
+            # Check if web container is running
+            if ! $COMPOSE_CMD -f docker-compose.dev.yml ps web | grep -q "Up"; then
+              echo "❌ Web container is not running. Starting it..."
+              $COMPOSE_CMD -f docker-compose.dev.yml up -d web
+              sleep 10
+            fi
+            
+            # Run Alembic migrations
+            echo "=== Running Alembic migrations ==="
+            $COMPOSE_CMD -f docker-compose.dev.yml exec -T web alembic upgrade head
+            
+            if [ $? -eq 0 ]; then
+              echo "✅ Database migrations completed successfully"
+            else
+              echo "❌ Database migrations failed"
+              
+              # Show migration history for debugging
+              echo "=== Migration History ==="
+              $COMPOSE_CMD -f docker-compose.dev.yml exec -T web alembic history || true
+              
+              # Show current migration status
+              echo "=== Current Migration Status ==="
+              $COMPOSE_CMD -f docker-compose.dev.yml exec -T web alembic current || true
+              
+              exit 1
+            fi
+            
+            # Show final migration status
+            echo "=== Final Migration Status ==="
+            $COMPOSE_CMD -f docker-compose.dev.yml exec -T web alembic current
+            
+            echo "=== Database migrations completed ==="
+
+  health-check:
+    runs-on: ubuntu-latest
+    needs: run-migrations
+    steps:
+      - name: Final Health Check and Cleanup
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            echo "=== Final Health Check ==="
+            DOCKER_CMD="sudo docker"
+            COMPOSE_CMD="sudo docker compose"
+            if groups $USER | grep -q docker; then
+              DOCKER_CMD="docker"
+              COMPOSE_CMD="docker compose"
+            fi
+            
+            # Check container status
+            echo "=== Container Status ==="
+            $COMPOSE_CMD -f docker-compose.dev.yml ps
+            
+            # # Test application health
+            # echo "=== Testing application health ==="
+            # for i in {1..10}; do
+            #   if curl -f http://localhost:8080/health; then
+            #     echo "✅ Application is healthy!"
+            #     break
+            #   else
+            #     echo "⏳ Attempt $i: Application not ready yet, waiting..."
+            #     sleep 10
+            #   fi
+            # done
+            
+            # # Test through nginx (if SSL is setup)
+            # echo "=== Testing through nginx ==="
+            # if curl -f -k https://chat-service.bildup.ai/health 2>/dev/null; then
+            #   echo "✅ Application accessible through nginx with SSL!"
+            # elif curl -f http://chat-service.bildup.ai/health 2>/dev/null; then
+            #   echo "✅ Application accessible through nginx!"
+            # else
+            #   echo "⚠️  Application not accessible through nginx (this may be expected if domain is not configured)"
+            # fi
+            
+            # Reload nginx to ensure it's working with the new container
+            echo "=== Reloading Nginx ==="
+            sudo nginx -t && sudo systemctl reload nginx
+            
+            # Show recent logs
+            echo "=== Recent Application Logs ==="
+            $COMPOSE_CMD -f docker-compose.dev.yml logs --tail=20 web
+            
+            # Clean up unused images
+            echo "=== Cleaning up unused Docker images ==="
+            $DOCKER_CMD image prune -f
+            
+            echo "=== FastAPI deployment completed successfully! ==="
