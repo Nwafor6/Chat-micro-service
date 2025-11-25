@@ -1,77 +1,85 @@
 services:
   web:
-    image: nwafor6/bildupai_chat:dev
+    image: nwafor6/chat-micro-service:dev
     restart: always
-    ports:
-      - "8080:8080"
     volumes:
       - ./logs:/app/logs
-    env_file:
-      - .env.dev
-    depends_on:
-      - postgres_dev
-      - redis_dev
     networks:
-      - bildupai_chat_dev
+      - chat_micro_service_dev
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:8080/health" ]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
-
-  postgres_dev:
-    image: postgres:15-alpine
-    restart: always
     environment:
-      POSTGRES_DB: bildupai_chat_dev
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-    volumes:
-      - postgres_data_dev:/var/lib/postgresql/data
-    ports:
-      - "5433:5432"
-    healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - bildupai_chat_dev
+      - REDIS_URL=redis://redis_chat_dev:6379
+      - DATABASE_URL=${DATABASE_URL}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - APP_NAME=Global Chat Service
+      - ENV=development
+      - DEBUG=true
+      - BASE_URL=https://chat-micro-service.nwafor.tech
+      - API_PREFIX=/api/v1
+      - DB_TYPE=postgres
+      - JWT_ALGORITHM=HS256
+      - JWT_TOKEN_TTL=10080
+      - REDIS_DB=0
+      - LOG_LEVEL=INFO
+      - LOG_FORMAT=json
 
-  redis_dev:
+  redis_chat_dev:
     image: redis:7-alpine
     restart: always
     volumes:
-      - redis_data_dev:/data
+      - redis_chat_data_dev:/data
     ports:
-      - "6380:6379"
+      - "6381:6379" # Using different port to avoid conflicts
     healthcheck:
       test: [ "CMD", "redis-cli", "ping" ]
       interval: 10s
       timeout: 5s
       retries: 5
     networks:
-      - bildupai_chat_dev
+      - chat_micro_service_dev
 
-  # Optional: Redis Commander for Redis management
-  redis-commander:
-    image: rediscommander/redis-commander:latest
+  nginx:
+    image: nginx:alpine
     restart: always
-    environment:
-      - REDIS_HOSTS=local:redis_dev:6379
     ports:
-      - "8081:8081"
+      - "8003:80" # Using port 8003 to avoid conflicts with existing services
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./certbot/conf:/etc/letsencrypt:ro # SSL certificates from certbot
+      - ./certbot/www:/var/www/certbot:ro # Let's Encrypt challenges
+      - ./logs/nginx:/var/log/nginx
     depends_on:
-      - redis_dev
+      - web
     networks:
-      - bildupai_chat_dev
+      - chat_micro_service_dev
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  certbot:
+    image: certbot/certbot:latest
+    container_name: certbot_chat_service
+    volumes:
+      - ./certbot/conf:/etc/letsencrypt
+      - ./certbot/www:/var/www/certbot
+    environment:
+      - SSL_EMAIL=${SSL_EMAIL}
+    command: certonly --webroot --webroot-path=/var/www/certbot --email ${SSL_EMAIL} --agree-tos --no-eff-email --staging -d chat-micro-service.nwafor.tech -d www.chat-micro-service.nwafor.tech
+    networks:
+      - chat_micro_service_dev
 
 volumes:
-  postgres_data_dev:
-  redis_data_dev:
+  redis_chat_data_dev:
 
 
 networks:
-  bildupai_chat_dev:
-    name: bildupai_chat_dev
+  chat_micro_service_dev:
+    name: chat_micro_service_dev

@@ -38,9 +38,7 @@ app = FastAPI(
 # Add CORS middleware with specific origins for credentials
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "*"
-    ],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -77,7 +75,7 @@ async def home(request: Request) -> Dict[str, Any]:
             f"{settings.base_url}/docs" if settings.env != "production" else "disabled"
         ),
         "websocket_docs": f"{settings.base_url}{settings.api_prefix}/docs/websockets",
-        # "health": f"{settings.base_url}/health",
+        "health": f"{settings.base_url}/health",
         "api_prefix": settings.api_prefix,
     }
 
@@ -91,19 +89,19 @@ async def home(request: Request) -> Dict[str, Any]:
     )
 
 
-# @app.get("/health")
-# async def health_check() -> Dict[str, Any]:
-#     """Health check endpoint for load balancers and monitoring."""
-#     return api_success(
-#         data={
-#             "service": settings.app_name,
-#             "status": "healthy",
-#             "version": settings.app_version,
-#             "timestamp": datetime.now(),
-#             "database": settings.db_type,
-#         },
-#         message="Service is healthy",
-#     )
+@app.get("/health")
+async def health_check() -> Dict[str, Any]:
+    """Health check endpoint for load balancers and monitoring."""
+    return api_success(
+        data={
+            "service": settings.app_name,
+            "status": "healthy",
+            "version": settings.app_version,
+            "timestamp": datetime.now(),
+            "database": settings.db_type,
+        },
+        message="Service is healthy",
+    )
 
 
 LifecycleManager(app)
