@@ -3,10 +3,10 @@ name: Deploy FastAPI to EC2 - Develop
 on:
   push:
     branches:
-      - setup-deployment-25-11-2025
+      - main
 
 env:
-  OVERRIDE_NGINX: True  # Set to true to force nginx reconfiguration
+  OVERRIDE_NGINX: false  # Set to true to force nginx reconfiguration
 
 jobs:
   docker-build-push:
@@ -30,10 +30,10 @@ jobs:
           context: .
           push: true
           tags: |
-            ${{ secrets.DOCKER_USERNAME }}/chat-micro-service:dev
-            ${{ secrets.DOCKER_USERNAME }}/chat-micro-service:${{ github.sha }}
-          cache-from: type=registry,ref=${{ secrets.DOCKER_USERNAME }}/chat-micro-service:buildcache
-          cache-to: type=registry,ref=${{ secrets.DOCKER_USERNAME }}/chat-micro-service:buildcache,mode=max
+            ${{ secrets.DOCKER_USERNAME }}/chat_microservice:dev
+            ${{ secrets.DOCKER_USERNAME }}/chat_microservice:${{ github.sha }}
+          cache-from: type=registry,ref=${{ secrets.DOCKER_USERNAME }}/chat_microservice:buildcache
+          cache-to: type=registry,ref=${{ secrets.DOCKER_USERNAME }}/chat_microservice:buildcache,mode=max
 
   install-docker:
     runs-on: ubuntu-latest
@@ -76,109 +76,258 @@ jobs:
             sudo docker compose version
             echo "=== Docker installation check completed ==="
 
-  setup-ssl:
+  setup-nginx:
     runs-on: ubuntu-latest
     needs: install-docker
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup SSL with Certbot Docker
+      - name: Setup Nginx and Certbot
         uses: appleboy/ssh-action@v1.0.0
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USERNAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-            echo "=== Setting up SSL with Certbot Docker ==="
+            echo "=== Setting up Nginx and SSL ==="
+            echo "OVERRIDE_NGINX flag: ${{ env.OVERRIDE_NGINX }}"
             
-            # Create directories for certbot
-            mkdir -p ./certbot/conf
-            mkdir -p ./certbot/www
-            mkdir -p ./logs/nginx
+            # Install Nginx if not present
+            if ! command -v nginx &> /dev/null; then
+              echo "Nginx not found. Installing..."
+              sudo apt-get update
+              sudo apt-get install -y nginx
+              sudo systemctl start nginx
+              sudo systemctl enable nginx
+              echo "Nginx installation completed"
+            else
+              echo "Nginx is already installed: $(nginx -v 2>&1)"
+            fi
             
-            # Check if certificates already exist and are valid
-            if [ -f "./certbot/conf/live/chat.valcertra.com/fullchain.pem" ]; then
-              echo "SSL certificates already exist, checking validity..."
-              CERT_EXPIRY=$(openssl x509 -enddate -noout -in ./certbot/conf/live/chat.valcertra.com/fullchain.pem | cut -d= -f2)
-              CERT_EXPIRY_EPOCH=$(date -d "$CERT_EXPIRY" +%s)
-              CURRENT_EPOCH=$(date +%s)
-              DAYS_UNTIL_EXPIRY=$(( (CERT_EXPIRY_EPOCH - CURRENT_EPOCH) / 86400 ))
+            # Install Certbot if not present
+            if ! command -v certbot &> /dev/null; then
+              echo "Certbot not found. Installing..."
+              sudo apt-get update
+              sudo apt-get install -y certbot python3-certbot-nginx
+              echo "Certbot installation completed"
+            else
+              echo "Certbot is already installed: $(certbot --version)"
+            fi
+            
+            SITE_CONFIG="/etc/nginx/sites-available/chat-service-dev"
+            SITES_ENABLED="/etc/nginx/sites-enabled/chat-service-dev"
+            
+            # Check if we should override nginx config
+            if [ "${{ env.OVERRIDE_NGINX }}" = "true" ] || [ ! -f "$SITE_CONFIG" ]; then
+              echo "Creating/Updating Nginx configuration for chat-service-dev..."
               
-              if [ $DAYS_UNTIL_EXPIRY -gt 30 ]; then
-                echo "✅ SSL certificates are valid for $DAYS_UNTIL_EXPIRY more days, skipping renewal"
-                exit 0
-              else
-                echo "⚠️  SSL certificates expire in $DAYS_UNTIL_EXPIRY days, will renew"
+              # Remove existing config if override is true
+              if [ "${{ env.OVERRIDE_NGINX }}" = "true" ]; then
+                echo "Override flag is true, removing existing nginx configuration..."
+                sudo rm -f "$SITE_CONFIG"
+                sudo rm -f "$SITES_ENABLED"
               fi
-            fi
-            
-            # Stop all services using port 80 temporarily for SSL generation
-            echo "Checking for services using port 80..."
-            SERVICES_ON_80=$(sudo docker ps --format "table {{.Names}}\t{{.Ports}}" | grep ":80->" | awk '{print $1}' | tr '\n' ' ')
-            
-            if [ ! -z "$SERVICES_ON_80" ]; then
-              echo "Found services using port 80: $SERVICES_ON_80"
-              echo "Temporarily stopping services for SSL certificate generation..."
-              for service in $SERVICES_ON_80; do
-                sudo docker stop $service
-              done
-              NEED_RESTART_SERVICES="$SERVICES_ON_80"
+              
+              # Create the nginx configuration
+              sudo tee $SITE_CONFIG > /dev/null <<'EOF'
+            server {
+                listen 80;
+                server_name chat.valcertra.com www.chat.valcertra.com;
+
+                # Security headers
+                add_header X-Frame-Options "SAMEORIGIN" always;
+                add_header X-XSS-Protection "1; mode=block" always;
+                add_header X-Content-Type-Options "nosniff" always;
+                add_header Referrer-Policy "no-referrer-when-downgrade" always;
+                add_header Content-Security-Policy "default-src 'self' http: https: data: blob: 'unsafe-inline'" always;
+
+                # Proxy dynamic HTTP requests to FastAPI
+                location / {
+                    proxy_pass http://127.0.0.1:8003;
+                    proxy_set_header Host $host;
+                    proxy_set_header X-Real-IP $remote_addr;
+                    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                    proxy_set_header X-Forwarded-Proto $scheme;
+                    proxy_set_header X-Forwarded-Host $server_name;
+                    
+                    # Timeout settings
+                    proxy_connect_timeout 60s;
+                    proxy_send_timeout 60s;
+                    proxy_read_timeout 60s;
+                }
+
+                # WebSocket support
+                location /ws/ {
+                    proxy_pass http://127.0.0.1:8003;
+                    proxy_http_version 1.1;
+                    proxy_set_header Upgrade $http_upgrade;
+                    proxy_set_header Connection "upgrade";
+                    proxy_set_header Host $host;
+                    proxy_set_header X-Real-IP $remote_addr;
+                    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                    proxy_set_header X-Forwarded-Proto $scheme;
+                    proxy_set_header X-Forwarded-Host $server_name;
+                    
+                    # WebSocket timeout settings
+                    proxy_read_timeout 86400;
+                    proxy_send_timeout 86400;
+                }
+
+                # Health check endpoint
+                location /health {
+                    proxy_pass http://127.0.0.1:8003;
+                    proxy_set_header Host $host;
+                    proxy_set_header X-Real-IP $remote_addr;
+                    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                    proxy_set_header X-Forwarded-Proto $scheme;
+                    access_log off;
+                }
+
+                # Gzip compression
+                gzip on;
+                gzip_vary on;
+                gzip_min_length 1024;
+                gzip_proxied expired no-cache no-store private auth;
+                gzip_types
+                    text/plain
+                    text/css
+                    text/xml
+                    text/javascript
+                    application/json
+                    application/javascript
+                    application/xml+rss
+                    application/atom+xml
+                    image/svg+xml;
+            }
+            EOF
+              
+              echo "Nginx configuration created/updated successfully"
+              
+              # Create symbolic link
+              echo "Creating symbolic link for chat-service-dev..."
+              sudo ln -sf $SITE_CONFIG $SITES_ENABLED
+              echo "Symbolic link created successfully"
+              
+              # Remove default nginx site if it exists
+              if [ -L "/etc/nginx/sites-enabled/default" ]; then
+                echo "Removing default nginx site..."
+                sudo rm -f /etc/nginx/sites-enabled/default
+              fi
+              
             else
-              NEED_RESTART_SERVICES=""
+              echo "Nginx configuration already exists and OVERRIDE_NGINX is false. Skipping nginx config update."
             fi
             
-            # Also check for any nginx processes on port 80
-            if sudo lsof -i :80 | grep -q nginx; then
-              echo "Found nginx process on port 80, stopping it..."
-              sudo systemctl stop nginx || true
-              sudo pkill nginx || true
-              NEED_RESTART_NGINX=true
+            # Always test nginx configuration
+            echo "Testing Nginx configuration..."
+            if sudo nginx -t; then
+              echo "Nginx configuration is valid"
+              echo "Reloading Nginx..."
+              sudo systemctl reload nginx
+              echo "Nginx status:"
+              sudo systemctl status nginx --no-pager -l
             else
-              NEED_RESTART_NGINX=false
-            fi
-            
-            # Run certbot using standalone mode (which requires port 80)
-            echo "Running certbot to obtain SSL certificates using standalone mode..."
-            sudo docker run --rm \
-              -p 80:80 \
-              -v $(pwd)/certbot/conf:/etc/letsencrypt \
-              certbot/certbot certonly \
-              --standalone \
-              --email ${{ secrets.SSL_EMAIL }} \
-              --agree-tos \
-              --no-eff-email \
-              --staging \
-              -d chat.valcertra.com \
-              -d www.chat.valcertra.com
-            
-            # Restart the services if we stopped them
-            if [ ! -z "$NEED_RESTART_SERVICES" ]; then
-              echo "Restarting stopped services..."
-              for service in $NEED_RESTART_SERVICES; do
-                sudo docker start $service
-              done
-            fi
-            
-            # Restart nginx if we stopped it
-            if [ "$NEED_RESTART_NGINX" = true ]; then
-              echo "Restarting nginx..."
-              sudo systemctl start nginx || true
-            fi
-            
-            # Verify certificates were created
-            if [ -f "./certbot/conf/live/chat.valcertra.com/fullchain.pem" ]; then
-              echo "✅ SSL certificates obtained successfully"
-            else
-              echo "❌ Failed to obtain SSL certificates"
+              echo "❌ Nginx configuration test failed!"
+              echo "Showing nginx error log:"
+              sudo tail -20 /var/log/nginx/error.log
               exit 1
+            fi
+            
+            echo "=== Nginx setup completed ==="
+
+      - name: Setup SSL Certificate
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            echo "=== Setting up SSL Certificate ==="
+            echo "OVERRIDE_NGINX flag: ${{ env.OVERRIDE_NGINX }}"
+            
+            # Check if SSL certificate already exists
+            if sudo certbot certificates 2>/dev/null | grep -q "chat.valcertra.com"; then
+              echo "SSL certificate for chat.valcertra.com already exists"
+              
+              # If override is true, recreate the certificate
+              if [ "${{ env.OVERRIDE_NGINX }}" = "true" ]; then
+                echo "Override flag is true, recreating SSL certificate..."
+                
+                # Delete existing certificate
+                sudo certbot delete --non-interactive --cert-name chat.valcertra.com
+                
+                # Stop nginx temporarily
+                sudo systemctl stop nginx
+                
+                # Get new SSL certificate
+                sudo certbot certonly \
+                  --standalone \
+                  --non-interactive \
+                  --agree-tos \
+                  --email ${{ secrets.SSL_EMAIL }} \
+                  -d chat.valcertra.com \
+                  -d www.chat.valcertra.com
+                
+                # Start nginx back up
+                sudo systemctl start nginx
+                
+                # Configure nginx for SSL
+                sudo certbot --nginx \
+                  --non-interactive \
+                  --agree-tos \
+                  --redirect \
+                  -d chat.valcertra.com \
+                  -d www.chat.valcertra.com
+                
+                echo "SSL certificate recreated successfully"
+              else
+                echo "Renewing existing certificate if needed..."
+                sudo certbot renew --quiet
+              fi
+            else
+              echo "Setting up SSL certificate for the first time..."
+              
+              # Stop nginx temporarily for standalone verification
+              sudo systemctl stop nginx
+              
+              # Get SSL certificate using standalone mode
+              sudo certbot certonly \
+                --standalone \
+                --non-interactive \
+                --agree-tos \
+                --email ${{ secrets.SSL_EMAIL }} \
+                -d chat.valcertra.com \
+                -d www.chat.valcertra.com
+              
+              # Start nginx back up
+              sudo systemctl start nginx
+              
+              # Run certbot nginx to update the configuration
+              sudo certbot --nginx \
+                --non-interactive \
+                --agree-tos \
+                --redirect \
+                -d chat.valcertra.com \
+                -d www.chat.valcertra.com
+              
+              echo "SSL certificate setup completed"
+            fi
+            
+            # Setup auto-renewal cron job if not exists
+            if ! sudo crontab -l 2>/dev/null | grep -q "certbot renew"; then
+              echo "Setting up SSL certificate auto-renewal..."
+              (sudo crontab -l 2>/dev/null; echo "0 12 * * * /usr/bin/certbot renew --quiet") | sudo crontab -
+              echo "Auto-renewal cron job setup completed"
+            else
+              echo "SSL auto-renewal is already configured"
             fi
             
             echo "=== SSL setup completed ==="
 
   update-environment:
     runs-on: ubuntu-latest
-    needs: setup-ssl
+    needs: setup-nginx
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -190,20 +339,20 @@ jobs:
           username: ${{ secrets.EC2_USERNAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-            REMOTE_PATH="./docker-compose.dev.yml"
+            REMOTE_PATH="./docker-compose.chat.yml"
             if [ -d "$REMOTE_PATH" ]; then rm -rf "$REMOTE_PATH"; fi
             if [ -f "$REMOTE_PATH" ]; then rm -f "$REMOTE_PATH"; fi
 
-      - name: Copy docker-compose.dev.yml to server
+      - name: Copy docker-compose.chat.yml to server
         uses: appleboy/scp-action@v0.1.4
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USERNAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          source: "docker-compose.dev.yml"
+          source: "docker-compose.chat.yml"
           target: "."
 
-      - name: Update Docker Deployment Files
+      - name: Update Environment Variables on Server
         uses: appleboy/ssh-action@v1.0.0
         with:
           host: ${{ secrets.EC2_HOST }}
@@ -223,22 +372,53 @@ jobs:
             if groups $USER | grep -q docker; then
               COMPOSE_CMD="docker compose"
             fi
-            $COMPOSE_CMD -f docker-compose.dev.yml down --remove-orphans 2>/dev/null || true
+            $COMPOSE_CMD -f docker-compose.chat.yml down --remove-orphans 2>/dev/null || true
             
-            # Ensure directories exist
-            mkdir -p ./certbot/conf
-            mkdir -p ./certbot/www
-            mkdir -p ./logs/nginx
+            # Create new environment file using cat with EOF to avoid shell interpretation
+            echo "Creating new .env.dev file..."
+            cat <<'EOF' > .env.dev
+            APP_NAME=Chat Microservice
+            APP_DESCRIPTION=Real-time chat microservice
+            APP_VERSION=1.0.0
+            DEBUG=true
+            ENV=development
+            EOF
             
-            # Verify SSL certificates exist
-            if [ -f "./certbot/conf/live/chat.valcertra.com/fullchain.pem" ]; then
-              echo "✅ SSL certificates found and ready for use"
+            # Add secrets separately with proper escaping
+            echo "DATABASE_URL=${{ secrets.DATABASE_URL }}" >> .env.dev
+            echo "DB_TYPE=postgres" >> .env.dev
+            echo 'JWT_SECRET_KEY=${{ secrets.JWT_SECRET_KEY }}' >> .env.dev
+            echo "JWT_ALGORITHM=HS256" >> .env.dev
+            echo "JWT_ACCESS_TOKEN_EXPIRE_MINUTES=1440" >> .env.dev
+            
+            # Add remaining non-secret variables (removed Redis configurations)
+            cat <<'EOF' >> .env.dev
+            ALLOWED_ORIGINS=cat-noble-colt.ngrok-free.app,jointly-quiet-ladybug.ngrok-free.app,chat-microservice-mvp.vercel.app,edu.chat.ai,localhost:8000
+            ALLOWED_METHODS=GET,POST,PUT,DELETE,OPTIONS
+            BASE_URL=https://chat.valcertra.com
+            API_PREFIX=/api/v1
+            LOG_LEVEL=INFO
+            LOG_FORMAT=json
+            EOF
+            
+            # Verify the file was created and show first few lines (without sensitive data)
+            echo "Verifying .env.dev file creation..."
+            if [ -f ".env.dev" ]; then
+              echo "✅ .env.dev file created successfully"
+              echo "File size: $(wc -l < .env.dev) lines"
+              echo "First few lines (non-sensitive):"
+              head -5 .env.dev
+              echo ""
+              echo "JWT_SECRET_KEY length check:"
+              grep "JWT_SECRET_KEY=" .env.dev | cut -d'=' -f2 | wc -c
+              echo "First 15 characters of JWT_SECRET_KEY:"
+              grep "JWT_SECRET_KEY=" .env.dev | cut -d'=' -f2 | cut -c1-15
             else
-              echo "❌ SSL certificates not found. This should not happen after SSL setup step."
+              echo "❌ Failed to create .env.dev file"
               exit 1
             fi
             
-            echo "Environment setup completed"
+            echo "Environment variables update completed"
 
   deploy-docker:
     runs-on: ubuntu-latest
@@ -262,65 +442,31 @@ jobs:
             # Login to Docker Hub
             echo "${{ secrets.DOCKER_TOKEN }}" | $DOCKER_CMD login --username "${{ secrets.DOCKER_USERNAME }}" --password-stdin
             
-            # Set environment variables for docker-compose
-            export DATABASE_URL="${{ secrets.DATABASE_URL }}"
-            export JWT_SECRET_KEY="${{ secrets.JWT_SECRET_KEY }}"
-            export SSL_EMAIL="${{ secrets.SSL_EMAIL }}"
-            
             # Pull latest images
             echo "=== Pulling latest images ==="
-            $COMPOSE_CMD -f docker-compose.dev.yml pull
+            $COMPOSE_CMD -f docker-compose.chat.yml pull
             
             # Stop existing containers and remove them completely
             echo "=== Stopping and removing existing containers ==="
-            $COMPOSE_CMD -f docker-compose.dev.yml down --remove-orphans || true
+            $COMPOSE_CMD -f docker-compose.chat.yml down --remove-orphans || true
             
-            # Start Redis first
-            echo "=== Starting Redis ==="
-            $COMPOSE_CMD -f docker-compose.dev.yml up -d redis_chat_dev
-            
-            # Wait for Redis to be ready
-            echo "=== Waiting for Redis to be ready ==="
-            for i in {1..30}; do
-              if $COMPOSE_CMD -f docker-compose.dev.yml exec -T redis_chat_dev redis-cli ping | grep -q PONG; then
-                echo "✅ Redis is ready!"
-                break
-              else
-                echo "⏳ Attempt $i: Redis not ready yet, waiting..."
-                sleep 2
-              fi
-            done
-            
-            # Start web service
-            echo "=== Starting web service ==="
-            $COMPOSE_CMD -f docker-compose.dev.yml up -d web
+            # Start all services
+            echo "=== Starting all services ==="
+            $COMPOSE_CMD -f docker-compose.chat.yml up -d
             
             # Wait for web service to be running
             echo "=== Waiting for web service to start ==="
-            for i in {1..60}; do
-              if $COMPOSE_CMD -f docker-compose.dev.yml exec -T web curl -f http://localhost:8080/health > /dev/null 2>&1; then
-                echo "✅ Web service is healthy!"
-                break
-              else
-                echo "⏳ Attempt $i: Web service not ready yet, waiting..."
-                sleep 5
-              fi
-            done
-            
-            # Start nginx
-            echo "=== Starting Nginx ==="
-            $COMPOSE_CMD -f docker-compose.dev.yml up -d nginx
             sleep 15
             
             echo "=== Container status ==="
-            $COMPOSE_CMD -f docker-compose.dev.yml ps
+            $COMPOSE_CMD -f docker-compose.chat.yml ps
             
             # Verify JWT_SECRET_KEY is properly loaded in container
             echo "=== Verifying JWT_SECRET_KEY in container ==="
             sleep 5
-            if $COMPOSE_CMD -f docker-compose.dev.yml ps web | grep -q "Up"; then
+            if $COMPOSE_CMD -f docker-compose.chat.yml ps web | grep -q "Up"; then
               echo "Checking JWT_SECRET_KEY in container..."
-              $COMPOSE_CMD -f docker-compose.dev.yml exec -T web python -c "
+              $COMPOSE_CMD -f docker-compose.chat.yml exec -T web python -c "
             from app.core.config import settings
             jwt_key = settings.jwt_secret_key
             print(f'JWT_SECRET_KEY loaded: {jwt_key[:15]}...' if jwt_key else 'JWT_SECRET_KEY not found!')
@@ -348,15 +494,15 @@ jobs:
             fi
             
             # Check if web container is running
-            if ! $COMPOSE_CMD -f docker-compose.dev.yml ps web | grep -q "Up"; then
+            if ! $COMPOSE_CMD -f docker-compose.chat.yml ps web | grep -q "Up"; then
               echo "❌ Web container is not running. Starting it..."
-              $COMPOSE_CMD -f docker-compose.dev.yml up -d web
+              $COMPOSE_CMD -f docker-compose.chat.yml up -d web
               sleep 10
             fi
             
             # Run Alembic migrations
             echo "=== Running Alembic migrations ==="
-            $COMPOSE_CMD -f docker-compose.dev.yml exec -T web alembic upgrade head
+            $COMPOSE_CMD -f docker-compose.chat.yml exec -T web alembic upgrade head
             
             if [ $? -eq 0 ]; then
               echo "✅ Database migrations completed successfully"
@@ -365,18 +511,18 @@ jobs:
               
               # Show migration history for debugging
               echo "=== Migration History ==="
-              $COMPOSE_CMD -f docker-compose.dev.yml exec -T web alembic history || true
+              $COMPOSE_CMD -f docker-compose.chat.yml exec -T web alembic history || true
               
               # Show current migration status
               echo "=== Current Migration Status ==="
-              $COMPOSE_CMD -f docker-compose.dev.yml exec -T web alembic current || true
+              $COMPOSE_CMD -f docker-compose.chat.yml exec -T web alembic current || true
               
               exit 1
             fi
             
             # Show final migration status
             echo "=== Final Migration Status ==="
-            $COMPOSE_CMD -f docker-compose.dev.yml exec -T web alembic current
+            $COMPOSE_CMD -f docker-compose.chat.yml exec -T web alembic current
             
             echo "=== Database migrations completed ==="
 
@@ -401,40 +547,18 @@ jobs:
             
             # Check container status
             echo "=== Container Status ==="
-            $COMPOSE_CMD -f docker-compose.dev.yml ps
+            $COMPOSE_CMD -f docker-compose.chat.yml ps
             
-            # Test application health through nginx
-            echo "=== Testing application health through nginx ==="
-            for i in {1..10}; do
-              if curl -f http://localhost:8003/health; then
-                echo "✅ Application is healthy through nginx!"
-                break
-              else
-                echo "⏳ Attempt $i: Application not ready through nginx yet, waiting..."
-                sleep 10
-              fi
-            done
-            
-            # Test through domain (if SSL is setup)
-            echo "=== Testing through domain ==="
-            if curl -f -k https://chat.valcertra.com:8444/health 2>/dev/null; then
-              echo "✅ Application accessible through domain with SSL!"
-            elif curl -f http://chat.valcertra.com:8003/health 2>/dev/null; then
-              echo "✅ Application accessible through domain!"
-            else
-              echo "⚠️  Application not accessible through domain (this may be expected if domain is not configured yet)"
-            fi
+            # Reload nginx to ensure it's working with the new container
+            echo "=== Reloading Nginx ==="
+            sudo nginx -t && sudo systemctl reload nginx
             
             # Show recent logs
             echo "=== Recent Application Logs ==="
-            $COMPOSE_CMD -f docker-compose.dev.yml logs --tail=20 web
-            $COMPOSE_CMD -f docker-compose.dev.yml logs --tail=20 nginx
+            $COMPOSE_CMD -f docker-compose.chat.yml logs --tail=20 web
             
             # Clean up unused images
             echo "=== Cleaning up unused Docker images ==="
             $DOCKER_CMD image prune -f
             
             echo "=== Chat Microservice deployment completed successfully! ==="
-            echo "🚀 Access your chat service at:"
-            echo "   HTTP:  http://chat.valcertra.com:8003"
-            echo "   HTTPS: https://chat.valcertra.com:8444"
