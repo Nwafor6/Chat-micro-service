@@ -47,8 +47,8 @@ services:
     image: nginx:alpine
     restart: always
     ports:
-      - "8003:80" # Using port 8003 to avoid conflicts with existing services
-      - "443:443"
+      - "8004:80" # Using port 8004 to avoid conflicts (8000,8001,8002,8005 are used)
+      - "8443:443" # Using 8443 for HTTPS to avoid conflicts
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
       - ./certbot/conf:/etc/letsencrypt:ro # SSL certificates from certbot
@@ -59,7 +59,7 @@ services:
     networks:
       - chat_micro_service_dev
     healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost/health" ]
+      test: [ "CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health" ]
       interval: 30s
       timeout: 10s
       retries: 3

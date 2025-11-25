@@ -17,7 +17,7 @@ This deployment has been updated to be a standalone, generic chat microservice w
 
 ### 3. Port Allocation (to avoid conflicts with existing services)
 - **Application**: Internal port 8080 (no external mapping)
-- **Nginx**: Port 8003 (HTTP) and 443 (HTTPS)
+- **Nginx**: Port 8004 (HTTP) and 8443 (HTTPS)
 - **Redis**: Port 6381 (was 6380)
 
 ### 4. SSL/TLS Configuration
@@ -57,7 +57,7 @@ This deployment has been updated to be a standalone, generic chat microservice w
 ## Container Architecture
 
 ```
-Internet → Nginx (Port 8003/443) → FastAPI (Port 8080)
+Internet → Nginx (Port 8004/8443) → FastAPI (Port 8080)
                                   ↓
                               Redis (Port 6381)
                                   ↓

@@ -97,59 +97,38 @@ jobs:
             mkdir -p ./certbot/www
             mkdir -p ./logs/nginx
             
-            # Create temporary nginx config for initial Let's Encrypt challenge
-            cat > ./nginx.temp.conf << 'EOF'
-            events {
-                worker_connections 1024;
-            }
-            http {
-                server {
-                    listen 80;
-                    server_name chat.valcertra.com www.chat.valcertra.com;
-                    
-                    location /.well-known/acme-challenge/ {
-                        root /var/www/certbot;
-                    }
-                    
-                    location / {
-                        return 200 'SSL setup in progress';
-                        add_header Content-Type text/plain;
-                    }
-                }
-            }
-            EOF
+            # Stop any conflicting services temporarily for SSL generation
+            echo "Checking for services using port 80..."
+            CONFLICTING_SERVICE=$(sudo docker ps --format "table {{.Names}}\t{{.Ports}}" | grep "0.0.0.0:80" | head -1 | awk '{print $1}' || echo "")
             
-            # Start temporary nginx for SSL challenge
-            sudo docker run -d --name nginx_temp \
-              -p 80:80 \
-              -v $(pwd)/nginx.temp.conf:/etc/nginx/nginx.conf:ro \
-              -v $(pwd)/certbot/www:/var/www/certbot:ro \
-              nginx:alpine
+            if [ ! -z "$CONFLICTING_SERVICE" ]; then
+              echo "Found service using port 80: $CONFLICTING_SERVICE"
+              echo "Temporarily stopping $CONFLICTING_SERVICE for SSL certificate generation..."
+              sudo docker stop $CONFLICTING_SERVICE
+              NEED_RESTART_SERVICE="$CONFLICTING_SERVICE"
+            else
+              NEED_RESTART_SERVICE=""
+            fi
             
-            # Wait for nginx to start
-            sleep 5
-            
-            # Run certbot to get SSL certificates
-            echo "Running certbot to obtain SSL certificates..."
+            # Run certbot using standalone mode (which requires port 80)
+            echo "Running certbot to obtain SSL certificates using standalone mode..."
             sudo docker run --rm \
+              -p 80:80 \
               -v $(pwd)/certbot/conf:/etc/letsencrypt \
-              -v $(pwd)/certbot/www:/var/www/certbot \
               certbot/certbot certonly \
-              --webroot \
-              --webroot-path=/var/www/certbot \
+              --standalone \
               --email ${{ secrets.SSL_EMAIL }} \
               --agree-tos \
               --no-eff-email \
-              --force-renewal \
+              --staging \
               -d chat.valcertra.com \
               -d www.chat.valcertra.com
             
-            # Stop temporary nginx
-            sudo docker stop nginx_temp || true
-            sudo docker rm nginx_temp || true
-            
-            # Remove temporary config
-            rm -f ./nginx.temp.conf
+            # Restart the conflicting service if we stopped it
+            if [ ! -z "$NEED_RESTART_SERVICE" ]; then
+              echo "Restarting $NEED_RESTART_SERVICE..."
+              sudo docker start $NEED_RESTART_SERVICE
+            fi
             
             # Verify certificates were created
             if [ -f "./certbot/conf/live/chat.valcertra.com/fullchain.pem" ]; then
@@ -391,7 +370,7 @@ jobs:
             # Test application health through nginx
             echo "=== Testing application health through nginx ==="
             for i in {1..10}; do
-              if curl -f http://localhost:8003/health; then
+              if curl -f http://localhost:8004/health; then
                 echo "✅ Application is healthy through nginx!"
                 break
               else
@@ -402,9 +381,9 @@ jobs:
             
             # Test through domain (if SSL is setup)
             echo "=== Testing through domain ==="
-            if curl -f -k https://chat.valcertra.com/health 2>/dev/null; then
+            if curl -f -k https://chat.valcertra.com:8443/health 2>/dev/null; then
               echo "✅ Application accessible through domain with SSL!"
-            elif curl -f http://chat.valcertra.com/health 2>/dev/null; then
+            elif curl -f http://chat.valcertra.com:8004/health 2>/dev/null; then
               echo "✅ Application accessible through domain!"
             else
               echo "⚠️  Application not accessible through domain (this may be expected if domain is not configured yet)"
