@@ -70,7 +70,7 @@ async def get_current_user(
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         logger.debug(f"Token payload: {payload}")
 
-        user_id: Optional[str] = payload.get("sub") or payload.get("user_id")
+        user_id: Optional[str] = payload.get("sub") or payload.get("id")
         if user_id is None:
             logger.error(f"No user ID found in token payload: {payload}")
             raise credentials_exception
