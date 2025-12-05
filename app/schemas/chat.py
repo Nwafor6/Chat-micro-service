@@ -12,7 +12,7 @@ class RoomBase(BaseModel):
 
     name: str
     description: Optional[str] = None
-    bildup_classroom_id: Optional[uuid.UUID] = None
+    # bildup_classroom_id: Optional[uuid.UUID] = None
 
 
 class MessageResponse(BaseModel):
