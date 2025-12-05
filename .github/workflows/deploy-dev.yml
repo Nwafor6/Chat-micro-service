@@ -3,10 +3,10 @@ name: Deploy FastAPI to EC2 - Develop
 on:
   push:
     branches:
-      - main
+      - setup-deployment-25-11-2025
 
 env:
-  OVERRIDE_NGINX: false  # Set to true to force nginx reconfiguration
+  OVERRIDE_NGINX: true  # Set to true to force nginx reconfiguration
 
 jobs:
   docker-build-push:
@@ -21,8 +21,8 @@ jobs:
       - name: Login to Docker Hub
         uses: docker/login-action@v3
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_TOKEN }}
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
@@ -30,10 +30,10 @@ jobs:
           context: .
           push: true
           tags: |
-            ${{ secrets.DOCKERHUB_USERNAME }}/bildupai_chat:dev
-            ${{ secrets.DOCKERHUB_USERNAME }}/bildupai_chat:${{ github.sha }}
-          cache-from: type=registry,ref=${{ secrets.DOCKERHUB_USERNAME }}/bildupai_chat:buildcache
-          cache-to: type=registry,ref=${{ secrets.DOCKERHUB_USERNAME }}/bildupai_chat:buildcache,mode=max
+            ${{ secrets.DOCKER_USERNAME }}/chat_microservice:dev
+            ${{ secrets.DOCKER_USERNAME }}/chat_microservice:${{ github.sha }}
+          cache-from: type=registry,ref=${{ secrets.DOCKER_USERNAME }}/chat_microservice:buildcache
+          cache-to: type=registry,ref=${{ secrets.DOCKER_USERNAME }}/chat_microservice:buildcache,mode=max
 
   install-docker:
     runs-on: ubuntu-latest
@@ -133,7 +133,7 @@ jobs:
               sudo tee $SITE_CONFIG > /dev/null <<'EOF'
             server {
                 listen 80;
-                server_name chat-service.bildup.ai www.chat-service.bildup.ai;
+                server_name chat.valcertra.com www.chat.valcertra.com;
 
                 # Security headers
                 add_header X-Frame-Options "SAMEORIGIN" always;
@@ -144,7 +144,7 @@ jobs:
 
                 # Proxy dynamic HTTP requests to FastAPI
                 location / {
-                    proxy_pass http://127.0.0.1:8080;
+                    proxy_pass http://127.0.0.1:8003;
                     proxy_set_header Host $host;
                     proxy_set_header X-Real-IP $remote_addr;
                     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -159,7 +159,7 @@ jobs:
 
                 # WebSocket support
                 location /ws/ {
-                    proxy_pass http://127.0.0.1:8080;
+                    proxy_pass http://127.0.0.1:8003;
                     proxy_http_version 1.1;
                     proxy_set_header Upgrade $http_upgrade;
                     proxy_set_header Connection "upgrade";
@@ -176,7 +176,7 @@ jobs:
 
                 # Health check endpoint
                 location /health {
-                    proxy_pass http://127.0.0.1:8080;
+                    proxy_pass http://127.0.0.1:8003;
                     proxy_set_header Host $host;
                     proxy_set_header X-Real-IP $remote_addr;
                     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -247,15 +247,15 @@ jobs:
             echo "OVERRIDE_NGINX flag: ${{ env.OVERRIDE_NGINX }}"
             
             # Check if SSL certificate already exists
-            if sudo certbot certificates 2>/dev/null | grep -q "chat-service.bildup.ai"; then
-              echo "SSL certificate for chat-service.bildup.ai already exists"
+            if sudo certbot certificates 2>/dev/null | grep -q "chat.valcertra.com"; then
+              echo "SSL certificate for chat.valcertra.com already exists"
               
               # If override is true, recreate the certificate
               if [ "${{ env.OVERRIDE_NGINX }}" = "true" ]; then
                 echo "Override flag is true, recreating SSL certificate..."
                 
                 # Delete existing certificate
-                sudo certbot delete --non-interactive --cert-name chat-service.bildup.ai
+                sudo certbot delete --non-interactive --cert-name chat.valcertra.com
                 
                 # Stop nginx temporarily
                 sudo systemctl stop nginx
@@ -266,8 +266,8 @@ jobs:
                   --non-interactive \
                   --agree-tos \
                   --email ${{ secrets.SSL_EMAIL }} \
-                  -d chat-service.bildup.ai \
-                  -d www.chat-service.bildup.ai
+                  -d chat.valcertra.com \
+                  -d www.chat.valcertra.com
                 
                 # Start nginx back up
                 sudo systemctl start nginx
@@ -277,8 +277,8 @@ jobs:
                   --non-interactive \
                   --agree-tos \
                   --redirect \
-                  -d chat-service.bildup.ai \
-                  -d www.chat-service.bildup.ai
+                  -d chat.valcertra.com \
+                  -d www.chat.valcertra.com
                 
                 echo "SSL certificate recreated successfully"
               else
@@ -297,8 +297,8 @@ jobs:
                 --non-interactive \
                 --agree-tos \
                 --email ${{ secrets.SSL_EMAIL }} \
-                -d chat-service.bildup.ai \
-                -d www.chat-service.bildup.ai
+                -d chat.valcertra.com \
+                -d www.chat.valcertra.com
               
               # Start nginx back up
               sudo systemctl start nginx
@@ -308,8 +308,8 @@ jobs:
                 --non-interactive \
                 --agree-tos \
                 --redirect \
-                -d chat-service.bildup.ai \
-                -d www.chat-service.bildup.ai
+                -d chat.valcertra.com \
+                -d www.chat.valcertra.com
               
               echo "SSL certificate setup completed"
             fi
@@ -339,17 +339,17 @@ jobs:
           username: ${{ secrets.EC2_USERNAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-            REMOTE_PATH="./docker-compose.dev.yml"
+            REMOTE_PATH="./docker-compose.chat.yml"
             if [ -d "$REMOTE_PATH" ]; then rm -rf "$REMOTE_PATH"; fi
             if [ -f "$REMOTE_PATH" ]; then rm -f "$REMOTE_PATH"; fi
 
-      - name: Copy docker-compose.dev.yml to server
+      - name: Copy docker-compose.chat.yml to server
         uses: appleboy/scp-action@v0.1.4
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USERNAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          source: "docker-compose.dev.yml"
+          source: "docker-compose.chat.yml"
           target: "."
 
       - name: Update Environment Variables on Server
@@ -372,13 +372,13 @@ jobs:
             if groups $USER | grep -q docker; then
               COMPOSE_CMD="docker compose"
             fi
-            $COMPOSE_CMD -f docker-compose.dev.yml down --remove-orphans 2>/dev/null || true
+            $COMPOSE_CMD -f docker-compose.chat.yml down --remove-orphans 2>/dev/null || true
             
             # Create new environment file using cat with EOF to avoid shell interpretation
             echo "Creating new .env.dev file..."
             cat <<'EOF' > .env.dev
-            APP_NAME=BildupAI Chat Service
-            APP_DESCRIPTION=Real-time chat service for BildupAI
+            APP_NAME=Chat Microservice
+            APP_DESCRIPTION=Real-time chat microservice
             APP_VERSION=1.0.0
             DEBUG=true
             ENV=development
@@ -390,16 +390,12 @@ jobs:
             echo 'JWT_SECRET_KEY=${{ secrets.JWT_SECRET_KEY }}' >> .env.dev
             echo "JWT_ALGORITHM=HS256" >> .env.dev
             echo "JWT_ACCESS_TOKEN_EXPIRE_MINUTES=1440" >> .env.dev
-            echo 'REDIS_URL=${{ secrets.REDIS_URL }}' >> .env.dev
             
-            # Add remaining non-secret variables
+            # Add remaining non-secret variables (removed Redis configurations)
             cat <<'EOF' >> .env.dev
-            ALLOWED_ORIGINS=cat-noble-colt.ngrok-free.app,jointly-quiet-ladybug.ngrok-free.app,bildai-mvp.vercel.app,edu.bildup.ai,localhost:8000
+            ALLOWED_ORIGINS=cat-noble-colt.ngrok-free.app,jointly-quiet-ladybug.ngrok-free.app,chat-microservice-mvp.vercel.app,edu.chat.ai,localhost:8000
             ALLOWED_METHODS=GET,POST,PUT,DELETE,OPTIONS
-            REDIS_HOST=redis_dev
-            REDIS_PORT=6379
-            REDIS_DB=0
-            BASE_URL=https://chat-service.bildup.ai
+            BASE_URL=https://chat.valcertra.com
             API_PREFIX=/api/v1
             LOG_LEVEL=INFO
             LOG_FORMAT=json
@@ -444,49 +440,33 @@ jobs:
             fi
             
             # Login to Docker Hub
-            echo "${{ secrets.DOCKERHUB_TOKEN }}" | $DOCKER_CMD login --username "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
+            echo "${{ secrets.DOCKER_TOKEN }}" | $DOCKER_CMD login --username "${{ secrets.DOCKER_USERNAME }}" --password-stdin
             
             # Pull latest images
             echo "=== Pulling latest images ==="
-            $COMPOSE_CMD -f docker-compose.dev.yml pull
+            $COMPOSE_CMD -f docker-compose.chat.yml pull
             
             # Stop existing containers and remove them completely
             echo "=== Stopping and removing existing containers ==="
-            $COMPOSE_CMD -f docker-compose.dev.yml down --remove-orphans || true
-            
-            # Start database and redis first
-            echo "=== Starting database and Redis ==="
-            $COMPOSE_CMD -f docker-compose.dev.yml up -d postgres_dev redis_dev
-            
-            # Wait for database to be ready
-            echo "=== Waiting for database to be ready ==="
-            for i in {1..30}; do
-              if $COMPOSE_CMD -f docker-compose.dev.yml exec -T postgres_dev pg_isready -U postgres; then
-                echo "✅ Database is ready!"
-                break
-              else
-                echo "⏳ Attempt $i: Database not ready yet, waiting..."
-                sleep 2
-              fi
-            done
+            $COMPOSE_CMD -f docker-compose.chat.yml down --remove-orphans || true
             
             # Start all services
             echo "=== Starting all services ==="
-            $COMPOSE_CMD -f docker-compose.dev.yml up -d
+            $COMPOSE_CMD -f docker-compose.chat.yml up -d
             
             # Wait for web service to be running
             echo "=== Waiting for web service to start ==="
             sleep 15
             
             echo "=== Container status ==="
-            $COMPOSE_CMD -f docker-compose.dev.yml ps
+            $COMPOSE_CMD -f docker-compose.chat.yml ps
             
             # Verify JWT_SECRET_KEY is properly loaded in container
             echo "=== Verifying JWT_SECRET_KEY in container ==="
             sleep 5
-            if $COMPOSE_CMD -f docker-compose.dev.yml ps web | grep -q "Up"; then
+            if $COMPOSE_CMD -f docker-compose.chat.yml ps web | grep -q "Up"; then
               echo "Checking JWT_SECRET_KEY in container..."
-              $COMPOSE_CMD -f docker-compose.dev.yml exec -T web python -c "
+              $COMPOSE_CMD -f docker-compose.chat.yml exec -T web python -c "
             from app.core.config import settings
             jwt_key = settings.jwt_secret_key
             print(f'JWT_SECRET_KEY loaded: {jwt_key[:15]}...' if jwt_key else 'JWT_SECRET_KEY not found!')
@@ -514,15 +494,15 @@ jobs:
             fi
             
             # Check if web container is running
-            if ! $COMPOSE_CMD -f docker-compose.dev.yml ps web | grep -q "Up"; then
+            if ! $COMPOSE_CMD -f docker-compose.chat.yml ps web | grep -q "Up"; then
               echo "❌ Web container is not running. Starting it..."
-              $COMPOSE_CMD -f docker-compose.dev.yml up -d web
+              $COMPOSE_CMD -f docker-compose.chat.yml up -d web
               sleep 10
             fi
             
             # Run Alembic migrations
             echo "=== Running Alembic migrations ==="
-            $COMPOSE_CMD -f docker-compose.dev.yml exec -T web alembic upgrade head
+            $COMPOSE_CMD -f docker-compose.chat.yml exec -T web alembic upgrade head
             
             if [ $? -eq 0 ]; then
               echo "✅ Database migrations completed successfully"
@@ -531,18 +511,18 @@ jobs:
               
               # Show migration history for debugging
               echo "=== Migration History ==="
-              $COMPOSE_CMD -f docker-compose.dev.yml exec -T web alembic history || true
+              $COMPOSE_CMD -f docker-compose.chat.yml exec -T web alembic history || true
               
               # Show current migration status
               echo "=== Current Migration Status ==="
-              $COMPOSE_CMD -f docker-compose.dev.yml exec -T web alembic current || true
+              $COMPOSE_CMD -f docker-compose.chat.yml exec -T web alembic current || true
               
               exit 1
             fi
             
             # Show final migration status
             echo "=== Final Migration Status ==="
-            $COMPOSE_CMD -f docker-compose.dev.yml exec -T web alembic current
+            $COMPOSE_CMD -f docker-compose.chat.yml exec -T web alembic current
             
             echo "=== Database migrations completed ==="
 
@@ -567,29 +547,7 @@ jobs:
             
             # Check container status
             echo "=== Container Status ==="
-            $COMPOSE_CMD -f docker-compose.dev.yml ps
-            
-            # # Test application health
-            # echo "=== Testing application health ==="
-            # for i in {1..10}; do
-            #   if curl -f http://localhost:8080/health; then
-            #     echo "✅ Application is healthy!"
-            #     break
-            #   else
-            #     echo "⏳ Attempt $i: Application not ready yet, waiting..."
-            #     sleep 10
-            #   fi
-            # done
-            
-            # # Test through nginx (if SSL is setup)
-            # echo "=== Testing through nginx ==="
-            # if curl -f -k https://chat-service.bildup.ai/health 2>/dev/null; then
-            #   echo "✅ Application accessible through nginx with SSL!"
-            # elif curl -f http://chat-service.bildup.ai/health 2>/dev/null; then
-            #   echo "✅ Application accessible through nginx!"
-            # else
-            #   echo "⚠️  Application not accessible through nginx (this may be expected if domain is not configured)"
-            # fi
+            $COMPOSE_CMD -f docker-compose.chat.yml ps
             
             # Reload nginx to ensure it's working with the new container
             echo "=== Reloading Nginx ==="
@@ -597,10 +555,10 @@ jobs:
             
             # Show recent logs
             echo "=== Recent Application Logs ==="
-            $COMPOSE_CMD -f docker-compose.dev.yml logs --tail=20 web
+            $COMPOSE_CMD -f docker-compose.chat.yml logs --tail=20 web
             
             # Clean up unused images
             echo "=== Cleaning up unused Docker images ==="
             $DOCKER_CMD image prune -f
             
-            echo "=== FastAPI deployment completed successfully! ==="
+            echo "=== Chat Microservice deployment completed successfully! ==="

@@ -1,0 +1,22 @@
+services:
+  web:
+    image: nwafor6/chat_microservice:dev
+    restart: always
+    ports:
+      - "8003:8003"
+    volumes:
+      - ./logs:/app/logs
+    env_file:
+      - .env.dev
+    networks:
+      - chat_microservice_dev
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8003/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+networks:
+  chat_microservice_dev:
+    name: chat_microservice_dev
