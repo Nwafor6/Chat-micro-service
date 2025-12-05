@@ -387,7 +387,7 @@ jobs:
             # Add secrets separately with proper escaping
             echo "DATABASE_URL=${{ secrets.DATABASE_URL }}" >> .env.chat-service.dev
             echo "DB_TYPE=postgres" >> .env.chat-service.dev
-            echo 'JWT_SECRET_KEY=${{ secrets.JWT_SECRET_KEY }}' >> .env.chat-service.dev
+            echo 'JWT_SECRET_KEY="${{ secrets.JWT_SECRET_KEY }}"' >> .env.chat-service.dev
             echo "JWT_ALGORITHM=HS256" >> .env.chat-service.dev
             
             # Add remaining non-secret variables (removed Redis configurations)
