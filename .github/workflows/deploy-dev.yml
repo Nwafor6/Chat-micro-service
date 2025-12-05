@@ -245,75 +245,74 @@ jobs:
           script: |
             echo "=== Setting up SSL Certificate ==="
             echo "OVERRIDE_NGINX flag: ${{ env.OVERRIDE_NGINX }}"
-            
-            # Check if SSL certificate already exists
-            if sudo certbot certificates 2>/dev/null | grep -q "chat.valcertra.com"; then
+
+            # Use staging CA when OVERRIDE_NGINX=true (safe for testing, not for production)
+            STAGING_FLAG=""
+            if [ "${{ env.OVERRIDE_NGINX }}" = "true" ]; then
+              echo "OVERRIDE_NGINX=true -> using Let's Encrypt staging (for testing)"
+              STAGING_FLAG="--staging"
+            fi
+
+            DOMAIN_ARGS="-d chat.valcertra.com -d www.chat.valcertra.com"
+            EMAIL="${{ secrets.SSL_EMAIL }}"
+
+            cert_exists() {
+              sudo certbot certificates 2>/dev/null | grep -q "chat.valcertra.com"
+            }
+
+            obtain_cert() {
+              sudo certbot certonly --standalone --non-interactive --agree-tos --email "$EMAIL" $DOMAIN_ARGS $STAGING_FLAG
+            }
+
+            configure_nginx() {
+              sudo certbot --nginx --non-interactive --agree-tos --redirect $DOMAIN_ARGS || return 1
+            }
+
+            # If cert already exists
+            if cert_exists; then
               echo "SSL certificate for chat.valcertra.com already exists"
-              
-              # If override is true, recreate the certificate
               if [ "${{ env.OVERRIDE_NGINX }}" = "true" ]; then
-                echo "Override flag is true, recreating SSL certificate..."
-                
-                # Delete existing certificate
-                sudo certbot delete --non-interactive --cert-name chat.valcertra.com
-                
-                # Stop nginx temporarily
-                sudo systemctl stop nginx
-                
-                # Get new SSL certificate
-                sudo certbot certonly \
-                  --standalone \
-                  --non-interactive \
-                  --agree-tos \
-                  --email ${{ secrets.SSL_EMAIL }} \
-                  -d chat.valcertra.com \
-                  -d www.chat.valcertra.com
-                
-                # Start nginx back up
-                sudo systemctl start nginx
-                
-                # Configure nginx for SSL
-                sudo certbot --nginx \
-                  --non-interactive \
-                  --agree-tos \
-                  --redirect \
-                  -d chat.valcertra.com \
-                  -d www.chat.valcertra.com
-                
-                echo "SSL certificate recreated successfully"
+                echo "Override flag is true, attempting to recreate certificate (may hit Let's Encrypt rate limits)..."
+                sudo certbot delete --non-interactive --cert-name chat.valcertra.com || true
               else
-                echo "Renewing existing certificate if needed..."
-                sudo certbot renew --quiet
+                echo "Running certbot renew to ensure certificate is up-to-date..."
+                sudo certbot renew --quiet || echo "certbot renew exited with non-zero status (continuing)"
+              fi
+            fi
+
+            # Try to obtain a certificate if none exists (or after deletion)
+            if ! cert_exists; then
+              echo "Requesting a certificate for chat.valcertra.com and www.chat.valcertra.com"
+              OUTPUT=$(obtain_cert 2>&1) || RET=$? && RET=${RET:-0}
+              RET=${RET:-0}
+              echo "$OUTPUT"
+
+              if echo "$OUTPUT" | grep -qi "too many certificates"; then
+                echo "ERROR: Let's Encrypt rate limit hit for these identifiers."
+                if cert_exists; then
+                  echo "An existing certificate is present on the system; continuing with the existing certificate."
+                else
+                  echo "No existing certificate available. You must either:"
+                  echo "  - Wait until the rate limit resets (see message from certbot),"
+                  echo "  - Use the staging CA for testing (set OVERRIDE_NGINX=true),"
+                  echo "  - Or request a certificate from a different CA / change identifiers."
+                  exit 1
+                fi
+              elif [ $RET -ne 0 ]; then
+                echo "❌ certbot failed with exit code $RET. Check /var/log/letsencrypt/letsencrypt.log for details."
+                exit $RET
+              else
+                echo "Certificate obtained successfully (or staging used). Configuring nginx..."
+                configure_nginx || {
+                  echo "❌ certbot --nginx failed. Inspect /var/log/letsencrypt/letsencrypt.log"
+                  exit 1
+                }
               fi
             else
-              echo "Setting up SSL certificate for the first time..."
-              
-              # Stop nginx temporarily for standalone verification
-              sudo systemctl stop nginx
-              
-              # Get SSL certificate using standalone mode
-              sudo certbot certonly \
-                --standalone \
-                --non-interactive \
-                --agree-tos \
-                --email ${{ secrets.SSL_EMAIL }} \
-                -d chat.valcertra.com \
-                -d www.chat.valcertra.com
-              
-              # Start nginx back up
-              sudo systemctl start nginx
-              
-              # Run certbot nginx to update the configuration
-              sudo certbot --nginx \
-                --non-interactive \
-                --agree-tos \
-                --redirect \
-                -d chat.valcertra.com \
-                -d www.chat.valcertra.com
-              
-              echo "SSL certificate setup completed"
+              echo "Certificate already present; ensuring nginx is configured for SSL..."
+              configure_nginx || echo "Warning: certbot --nginx failed to reconfigure nginx (continuing)"
             fi
-            
+
             # Setup auto-renewal cron job if not exists
             if ! sudo crontab -l 2>/dev/null | grep -q "certbot renew"; then
               echo "Setting up SSL certificate auto-renewal..."
@@ -322,7 +321,7 @@ jobs:
             else
               echo "SSL auto-renewal is already configured"
             fi
-            
+
             echo "=== SSL setup completed ==="
 
   update-environment:
