@@ -362,9 +362,9 @@ jobs:
             echo "=== Updating Environment Variables ==="
             
             # Remove existing environment file if it exists
-            if [ -f ".env.dev" ]; then
-              echo "Removing existing .env.dev file..."
-              rm -f .env.dev
+            if [ -f ".env.chat-service.dev" ]; then
+              echo "Removing existing .env.chat-service.dev file..."
+              rm -f .env.chat-service.dev
             fi
             
             # Stop existing containers first to ensure they pick up new environment
@@ -375,8 +375,8 @@ jobs:
             $COMPOSE_CMD -f docker-compose.chat.yml down --remove-orphans 2>/dev/null || true
             
             # Create new environment file using cat with EOF to avoid shell interpretation
-            echo "Creating new .env.dev file..."
-            cat <<'EOF' > .env.dev
+            echo "Creating new .env.chat-service.dev file..."
+            cat <<'EOF' > .env.chat-service.dev
             APP_NAME=Chat Microservice
             APP_DESCRIPTION=Real-time chat microservice
             APP_VERSION=1.0.0
@@ -385,14 +385,14 @@ jobs:
             EOF
             
             # Add secrets separately with proper escaping
-            echo "DATABASE_URL=${{ secrets.DATABASE_URL }}" >> .env.dev
-            echo "DB_TYPE=postgres" >> .env.dev
-            echo 'JWT_SECRET_KEY=${{ secrets.JWT_SECRET_KEY }}' >> .env.dev
-            echo "JWT_ALGORITHM=HS256" >> .env.dev
-            echo "JWT_ACCESS_TOKEN_EXPIRE_MINUTES=1440" >> .env.dev
+            echo "DATABASE_URL=${{ secrets.DATABASE_URL }}" >> .env.chat-service.dev
+            echo "DB_TYPE=postgres" >> .env.chat-service.dev
+            echo 'JWT_SECRET_KEY=${{ secrets.JWT_SECRET_KEY }}' >> .env.chat-service.dev
+            echo "JWT_ALGORITHM=HS256" >> .env.chat-service.dev
+            echo "JWT_ACCESS_TOKEN_EXPIRE_MINUTES=1440" >> .env.chat-service.dev
             
             # Add remaining non-secret variables (removed Redis configurations)
-            cat <<'EOF' >> .env.dev
+            cat <<'EOF' >> .env.chat-service.dev
             ALLOWED_ORIGINS=cat-noble-colt.ngrok-free.app,jointly-quiet-ladybug.ngrok-free.app,chat-microservice-mvp.vercel.app,edu.chat.ai,localhost:8000
             ALLOWED_METHODS=GET,POST,PUT,DELETE,OPTIONS
             BASE_URL=https://chat.valcertra.com
@@ -402,19 +402,19 @@ jobs:
             EOF
             
             # Verify the file was created and show first few lines (without sensitive data)
-            echo "Verifying .env.dev file creation..."
-            if [ -f ".env.dev" ]; then
-              echo "✅ .env.dev file created successfully"
-              echo "File size: $(wc -l < .env.dev) lines"
+            echo "Verifying .env.chat-service.dev file creation..."
+            if [ -f ".env.chat-service.dev" ]; then
+              echo "✅ .env.chat-service.dev file created successfully"
+              echo "File size: $(wc -l < .env.chat-service.dev) lines"
               echo "First few lines (non-sensitive):"
-              head -5 .env.dev
+              head -5 .env.chat-service.dev
               echo ""
               echo "JWT_SECRET_KEY length check:"
-              grep "JWT_SECRET_KEY=" .env.dev | cut -d'=' -f2 | wc -c
+              grep "JWT_SECRET_KEY=" .env.chat-service.dev | cut -d'=' -f2 | wc -c
               echo "First 15 characters of JWT_SECRET_KEY:"
-              grep "JWT_SECRET_KEY=" .env.dev | cut -d'=' -f2 | cut -c1-15
+              grep "JWT_SECRET_KEY=" .env.chat-service.dev | cut -d'=' -f2 | cut -c1-15
             else
-              echo "❌ Failed to create .env.dev file"
+              echo "❌ Failed to create .env.chat-service.dev file"
               exit 1
             fi
             

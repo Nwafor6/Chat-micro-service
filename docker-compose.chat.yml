@@ -7,7 +7,7 @@ services:
     volumes:
       - ./logs:/app/logs
     env_file:
-      - .env.dev
+      - .env.chat-service.dev
     networks:
       - chat_microservice_dev
     healthcheck:
