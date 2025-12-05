@@ -6,7 +6,7 @@ on:
       - develop
 
 env:
-  OVERRIDE_NGINX: true  # Set to true to force nginx reconfiguration
+  OVERRIDE_NGINX: false  # Set to true to force nginx reconfiguration
 
 jobs:
   docker-build-push:
