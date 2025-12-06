@@ -131,6 +131,12 @@ jobs:
               
               # Create the nginx configuration
               sudo tee $SITE_CONFIG > /dev/null <<'EOF'
+            map $http_origin $cors_origin {
+                default "";
+                "https://valcertra.com" $http_origin;
+                "https://www.valcertra.com" $http_origin;
+            }
+
             server {
                 listen 80;
                 server_name chat1.valcertra.com www.chat1.valcertra.com;
@@ -141,6 +147,25 @@ jobs:
                 add_header X-Content-Type-Options "nosniff" always;
                 add_header Referrer-Policy "no-referrer-when-downgrade" always;
                 add_header Content-Security-Policy "default-src 'self' http: https: data: blob: 'unsafe-inline'" always;
+
+                # CORS headers
+                add_header Access-Control-Allow-Origin $cors_origin always;
+                add_header Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS, PATCH" always;
+                add_header Access-Control-Allow-Headers "Authorization, Content-Type, Accept, Origin, X-Requested-With" always;
+                add_header Access-Control-Allow-Credentials "true" always;
+                add_header Access-Control-Max-Age "3600" always;
+
+                # Handle preflight OPTIONS requests
+                if ($request_method = 'OPTIONS') {
+                    add_header Access-Control-Allow-Origin $cors_origin always;
+                    add_header Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS, PATCH" always;
+                    add_header Access-Control-Allow-Headers "Authorization, Content-Type, Accept, Origin, X-Requested-With" always;
+                    add_header Access-Control-Allow-Credentials "true" always;
+                    add_header Access-Control-Max-Age "3600" always;
+                    add_header Content-Length 0;
+                    add_header Content-Type text/plain;
+                    return 204;
+                }
 
                 # Proxy dynamic HTTP requests to FastAPI
                 location / {
