@@ -273,8 +273,7 @@ class MainConsumer:
 
             # Prepare payload and headers (include "hears" header as requested)
             urls = [
-                "https://api-prod.bildup.ai/notification/send-multiple-notification/",
-                "https://api-dev1.bildup.ai/notification/send-multiple-notification/",
+                "https://api-dev.valcertra.com/notifications/send-multiple-notification/"
             ]
             # url = "https://api-prod.bildup.ai/notification/send-multiple-notification/"
             for url in urls:
