@@ -10,7 +10,7 @@ T = TypeVar("T")
 class RoomBase(BaseModel):
     """Base model for room data."""
 
-    name: str
+    name: Optional[str] = None
     description: Optional[str] = None
     # bildup_classroom_id: Optional[uuid.UUID] = None
 

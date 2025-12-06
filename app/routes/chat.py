@@ -74,7 +74,7 @@ class ChatRoutes:
 
         Args:
             request (Request): The FastAPI request object.
-            member_user_id (str): The BildUp user ID of the member user.
+            member_user_id (str): The user ID.
         Returns:
             dict: API success response with the existing or newly created chat room data.
         """

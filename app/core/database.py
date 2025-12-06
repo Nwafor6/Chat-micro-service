@@ -1,6 +1,8 @@
 from contextvars import ContextVar
 from typing import AsyncGenerator
 
+from sqlalchemy import create_engine
+from sqlalchemy.engine import Engine
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -33,8 +35,36 @@ def create_async_database_engine() -> AsyncEngine:
     return create_async_engine(database_url, pool_pre_ping=True, echo=False)
 
 
+def create_sync_database_engine() -> Engine:
+    """
+    Create and return a synchronous SQLAlchemy engine for SQLAdmin.
+
+    Returns:
+        Engine: Configured sync SQLAlchemy engine.
+    """
+    database_url = settings.get_database_url()
+    
+    # Ensure we're using sync drivers
+    if settings.db_type == "postgres":
+        # Use psycopg2 for sync connections (default PostgreSQL driver)
+        database_url = database_url.replace("postgresql+asyncpg://", "postgresql://")
+        if "postgresql://" not in database_url:
+            # If it's just postgresql://, ensure it stays that way
+            pass
+    elif settings.db_type == "mysql":
+        # Use mysqlclient or pymysql for sync connections
+        database_url = database_url.replace("mysql+aiomysql://", "mysql+pymysql://")
+        if "mysql://" in database_url and "mysql+pymysql://" not in database_url:
+            database_url = database_url.replace("mysql://", "mysql+pymysql://")
+    
+    return create_engine(database_url, pool_pre_ping=True, echo=False)
+
+
 # Create the async engine and sessionmaker
 async_engine: AsyncEngine = create_async_database_engine()
+
+# Create sync engine for SQLAdmin
+sync_engine: Engine = create_sync_database_engine()
 
 AsyncSessionLocal: sessionmaker = sessionmaker(
     bind=async_engine,

@@ -65,7 +65,15 @@ class Settings(BaseSettings):
 
     # CORS Settings
     # allowed_origins: str = (
-    #     "http://localhost:8080,http://localhost:8000,http://localhost:3001,https://bildup.ai"
+    #     "http://localhost:8000"
+    #     "http://127.0.0.1:8000"
+    #     "http://localhost:8080"
+    #     "http://127.0.0.1:8080"
+    #     "http://localhost:5500"
+    #     "http://127.0.0.1:5500"
+    #     "http://localhost:3000"
+    #     "http://localhost:5173"
+    #     "https://valcertra.com"
     # )
     # allowed_methods: str = "GET,POST,PUT,DELETE,OPTIONS"
     # allowed_headers: str = "*"

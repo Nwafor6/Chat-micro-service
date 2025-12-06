@@ -5,10 +5,12 @@ from typing import Any, Dict
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
-# from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
 
+from app.admin import setup_admin
 from app.core.config import settings
+from app.core.database import sync_engine  # Change this import
 from app.core.exceptions import (
     AppException,
     app_exception_handler,
@@ -35,39 +37,32 @@ app = FastAPI(
     redirect_slashes=False,  # Add this to prevent automatic redirects
 )
 
+
 # Add CORS middleware with specific origins for credentials
-# app.add_middleware(
-#     CORSMiddleware,
-#     allow_origins=[
-#         "http://localhost:8000",
-#         "http://127.0.0.1:8000",
-#         "http://localhost:8080",
-#         "http://127.0.0.1:8080",
-#         "http://localhost:5500",
-#         "http://127.0.0.1:5500",
-#         "http://localhost:3000",
-#         "http://localhost:5173",
-#         "https://valcertra.com"
-#     ],
-#     allow_credentials=True,
-#     allow_methods=["*"],
-#     allow_headers=["*"],
-#     expose_headers=["*"],
-#     max_age=3600,  # Cache preflight response for 1 hour
-# )
-
-
-# app.add_middleware(
-#   CORSMiddleware,
-#   allow_origins = ["*"],
-#   allow_methods = ["*"],
-#   allow_headers = ["*"]
-# )
-
-# Essential middlewares AFTER CORS (only JWT and DB)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:8000",
+        "http://127.0.0.1:8000",
+        "http://localhost:8080",
+        "http://127.0.0.1:8080",
+        "http://localhost:5500",
+        "http://127.0.0.1:5500",
+        "http://localhost:5501",
+        "http://127.0.0.1:5501",
+        "http://localhost:3001",
+        "http://localhost:5173",
+        "https://valcertra.com",
+        "https://www.valcertra.com",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+    expose_headers=["*"],
+    max_age=3600,  # Cache preflight response for 1 hour
+)
 app.add_middleware(DBSessionMiddleware)
 app.add_middleware(JWTAuthMiddleware)
-
 
 # Register exception handlers
 app.add_exception_handler(AppException, app_exception_handler)
@@ -88,10 +83,11 @@ async def home(request: Request) -> Dict[str, Any]:
         "websocket_docs": f"{settings.base_url}{settings.api_prefix}/docs/websockets",
         "health": f"{settings.base_url}/health",
         "api_prefix": settings.api_prefix,
+        "admin_route": f"{settings.base_url}/val-admin" if settings.env != "production" else "disabled",
     }
 
     response_data = {
-        "endpoints": endpoints,
+        "endpoints": endpoints if settings.env != "production" else {},
     }
 
     return api_success(
@@ -119,3 +115,6 @@ LifecycleManager(app)
 # Include API routers
 app.include_router(router, prefix=settings.api_prefix)
 app.include_router(websocket_routes)
+
+# Setup admin interface
+setup_admin(app, sync_engine)  # Use sync_engine instead

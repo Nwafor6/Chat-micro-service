@@ -67,7 +67,7 @@ class JWTAuthMiddleware(BaseHTTPMiddleware):
     """Middleware to handle JWT authentication."""
 
     async def dispatch(self, request: Request, call_next):
-        # Skip authentication for OPTIONS requests
+        # Skip authentication for OPTIONS requests - let CORS middleware handle it
         if request.method == "OPTIONS":
             return await call_next(request)
 
