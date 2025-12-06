@@ -53,7 +53,7 @@ app.add_middleware(
         "http://localhost:3001",
         "http://localhost:5173",
         "https://valcertra.com",
-        "https://www.valcertra.com",
+        "https://www.valcertra.com"
     ],
     allow_credentials=True,
     allow_methods=["*"],
