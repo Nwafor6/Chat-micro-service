@@ -133,7 +133,7 @@ jobs:
               sudo tee $SITE_CONFIG > /dev/null <<'EOF'
             server {
                 listen 80;
-                server_name chat.valcertra.com www.chat.valcertra.com;
+                server_name chat2.valcertra.com www.chat2.valcertra.com;
 
                 # Security headers
                 add_header X-Frame-Options "SAMEORIGIN" always;
@@ -264,15 +264,15 @@ jobs:
             echo "OVERRIDE_NGINX flag: ${{ env.OVERRIDE_NGINX }}"
             
             # Check if SSL certificate already exists
-            if sudo certbot certificates 2>/dev/null | grep -q "chat.valcertra.com"; then
-              echo "SSL certificate for chat.valcertra.com already exists"
+            if sudo certbot certificates 2>/dev/null | grep -q "chat2.valcertra.com"; then
+              echo "SSL certificate for chat2.valcertra.com already exists"
               
               # If override is true, recreate the certificate
               if [ "${{ env.OVERRIDE_NGINX }}" = "true" ]; then
                 echo "Override flag is true, recreating SSL certificate..."
                 
                 # Delete existing certificate
-                sudo certbot delete --non-interactive --cert-name chat.valcertra.com
+                sudo certbot delete --non-interactive --cert-name chat2.valcertra.com
                 
                 # Stop nginx temporarily
                 sudo systemctl stop nginx
@@ -283,8 +283,8 @@ jobs:
                   --non-interactive \
                   --agree-tos \
                   --email ${{ secrets.SSL_EMAIL }} \
-                  -d chat.valcertra.com \
-                  -d www.chat.valcertra.com
+                  -d chat2.valcertra.com \
+                  -d www.chat2.valcertra.com
                 
                 # Start nginx back up
                 sudo systemctl start nginx
@@ -294,8 +294,8 @@ jobs:
                   --non-interactive \
                   --agree-tos \
                   --redirect \
-                  -d chat.valcertra.com \
-                  -d www.chat.valcertra.com
+                  -d chat2.valcertra.com \
+                  -d www.chat2.valcertra.com
                 
                 echo "SSL certificate recreated successfully"
               else
@@ -314,8 +314,8 @@ jobs:
                 --non-interactive \
                 --agree-tos \
                 --email ${{ secrets.SSL_EMAIL }} \
-                -d chat.valcertra.com \
-                -d www.chat.valcertra.com
+                -d chat2.valcertra.com \
+                -d www.chat2.valcertra.com
               
               # Start nginx back up
               sudo systemctl start nginx
@@ -325,8 +325,8 @@ jobs:
                 --non-interactive \
                 --agree-tos \
                 --redirect \
-                -d chat.valcertra.com \
-                -d www.chat.valcertra.com
+                -d chat2.valcertra.com \
+                -d www.chat2.valcertra.com
               
               echo "SSL certificate setup completed"
             fi
@@ -409,7 +409,7 @@ jobs:
             
             # Add remaining non-secret variables (removed Redis configurations)
             cat <<'EOF' >> .env.chat-service.dev
-            BASE_URL=https://chat.valcertra.com
+            BASE_URL=https://chat2.valcertra.com
             API_PREFIX=/api/v1
             LOG_LEVEL=INFO
             EOF
