@@ -189,6 +189,9 @@ class MainConsumer:
             # Save message to database
             message = await self.save_message(content, message_type)
 
+            # query the user table to get the info opf the message sender
+            sender  = await User.find(self.user.id)
+
             # Broadcast message to room
             message_data = {
                 "type": "message",
@@ -198,7 +201,7 @@ class MainConsumer:
                 "user_id": str(self.user.user_id),
                 "room_id": self.room_id,
                 "timestamp": message.created_at.isoformat(),
-                "user_info": getattr(self.user, "user_info", {}),
+                "user_info": getattr(sender, "user_info", {}),
             }
 
             await manager.broadcast_to_room(
