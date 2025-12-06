@@ -62,6 +62,7 @@ class RoomController:
             list[Room]: List of rooms the user created or is a member of with last messages.
         """
         user_id = request.user.id
+        valcerta_user_id = request.user.user_id
 
         # Use existing query method and chain operations
         rooms_query = Room.query()
@@ -116,7 +117,7 @@ class RoomController:
                 # room.members_list = members
                 if room.room_type == RoomType.PRIVATE:
                     for member in members:
-                        if member.user_id != user_id:
+                        if member.user_id != valcerta_user_id:
                             room.room_custom_name = member.user_info
                             break
         finally:
