@@ -3,6 +3,7 @@ from datetime import datetime
 from typing import List, Optional, TypeVar
 
 from pydantic import BaseModel
+from app.schemas.user import UserResponse
 
 T = TypeVar("T")
 
@@ -38,6 +39,8 @@ class RoomResponse(RoomBase):
     last_message: Optional[MessageResponse] = None
     last_message_sender_info: dict = None
     member_count: int = 0
+    # members_list: Optional[List[UserResponse]] = None  # List of RoomMemberResponse
+    room_custom_name: Optional[dict] = {}
 
     class Config:
         from_attributes = True

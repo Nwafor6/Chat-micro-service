@@ -18,9 +18,6 @@ from app.models import User
 SECRET_KEY: str = settings.jwt_secret_key
 ALGORITHM: str = settings.jwt_algorithm
 
-print("JWT Secret Key:", SECRET_KEY)  # Debug: Print the secret key (remove in production)
-print("JWT Algorithm:", ALGORITHM)    # Debug: Print the algorithm (remove in production)
-
 # Password hashing context
 pwd_context: CryptContext = CryptContext(
     schemes=[settings.crypto_algorithm],

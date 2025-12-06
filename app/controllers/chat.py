@@ -88,25 +88,39 @@ class RoomController:
         rooms = await rooms_query.get()
 
         # Fetch last message for each room (excluding soft-deleted messages)
-        for room in rooms:
-            last_message = await Message.latest(room_id=room.id)
+        db = Room._get_db()
+        try:
+            for room in rooms:
+                last_message = await Message.latest(room_id=room.id)
 
-            # Attach last message to room object for serialization
-            room.last_message = last_message
+                # Attach last message to room object for serialization
+                room.last_message = last_message
 
-            # get the total number of members in the room
-            member_count_query = select(room_members_table.c.user_id).where(
-                room_members_table.c.room_id == room.id
-            )
-            member_result = await Room._get_db().execute(member_count_query)
-            members = member_result.scalars().all()
-            room.member_count = len(members)
-            room.last_message_sender_info = {}
+                # get the total number of members in the room
+                member_count_query = select(room_members_table.c.user_id).where(
+                    room_members_table.c.room_id == room.id
+                )
+                member_result = await db.execute(member_count_query)
+                members = member_result.scalars().all()
+                room.member_count = len(members)
+                room.last_message_sender_info = {}
 
-            # get the last message sender info
-            if last_message:
-                sender = await User.first(id=last_message.user_id)
-                room.last_message_sender_info = sender.user_info
+                # get the last message sender info
+                if last_message:
+                    sender = await User.first(id=last_message.user_id)
+                    room.last_message_sender_info = sender.user_info
+
+                # check the room members
+                print(room.id, "this si the room id")
+                members = await RoomController.get_room_members(room.id)
+                # room.members_list = members
+                if room.room_type == RoomType.PRIVATE:
+                    for member in members:
+                        if member.user_id != user_id:
+                            room.room_custom_name = member.user_info
+                            break
+        finally:
+            await db.close()
 
         return rooms
 
@@ -264,19 +278,23 @@ class RoomController:
 
         # Get all member user IDs for this room
         db = Room._get_db()
-        member_ids_query = select(room_members_table.c.user_id).where(
-            room_members_table.c.room_id == room_id
-        )
-        result = await db.execute(member_ids_query)
-        member_ids = result.scalars().all()
+        try:
+        
+            member_ids_query = select(room_members_table.c.user_id).where(
+                room_members_table.c.room_id == room_id
+            )
+            result = await db.execute(member_ids_query)
+            member_ids = result.scalars().all()
 
-        if not member_ids:
-            return []
+            if not member_ids:
+                return []
 
-        # Fetch all member users using proper SQLAlchemy syntax
-        stmt = select(User).where(User.id.in_(member_ids), User._soft_delete_filter())
-        result = await db.execute(stmt)
-        members = result.scalars().all()
+            # Fetch all member users using proper SQLAlchemy syntax
+            stmt = select(User).where(User.id.in_(member_ids), User._soft_delete_filter())
+            result = await db.execute(stmt)
+            members = result.scalars().all()
+        finally:
+            await db.close()
         return members
 
     # delete a group

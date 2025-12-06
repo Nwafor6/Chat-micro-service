@@ -57,6 +57,20 @@ class Room(Base):
         self.last_message = None
         self.member_count = 0
         self.last_message_sender_info = {}
+        # self.members_list = []
+        self.room_custom_name = {}
+        
+
+    class Config:
+        from_attributes = True
+
+    # @classmethod
+    # def from_orm(cls, obj):
+    #     # Map _members_list to members for serialization
+    #     data = super().from_orm(obj)
+    #     if hasattr(obj, 'members_list'):
+    #         data.members = obj.members_list
+    #     return data
 
 
 class Message(Base):
